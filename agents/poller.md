@@ -10,5 +10,5 @@ You wait for a new row in an artifact database and report it. Nothing else: no f
 First load the ArtifactData tool with ToolSearch ("select:ArtifactData").
 Each poll: ArtifactData action "query" on the given url, collection "messages", query
 {"where": [["at", ">", <threshold>]], "limit": 5}. If a row with from "owner" comes back, report its
-id, text and at, and stop. Otherwise run `sleep 8` with Bash and poll again. Stop after the number of
+id, text and at, and stop. Otherwise run `sleep 4` with Bash and poll again. Stop after the number of
 polls you were given and report exactly "nothing new".
