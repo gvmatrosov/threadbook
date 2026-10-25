@@ -38,9 +38,11 @@ async function start() {
   $("text").addEventListener("keydown", ev => {
     if (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) $("form").requestSubmit();
   });
-  $("log").addEventListener("click", ev => {
-    const b = ev.target.closest("[data-resend]");
-    if (b) { b.disabled = true; wire.resend(b.dataset.resend).then(checkCanSend); }
+  $("wake").addEventListener("click", ev => {
+    const b = ev.currentTarget;
+    if (!b.dataset.resend) return;
+    b.disabled = true;
+    wire.resend(b.dataset.resend).then(checkCanSend);
   });
   $("send").disabled = false;
 }

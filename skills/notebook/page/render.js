@@ -11,6 +11,7 @@ const SEND = {
 };
 const STATUS = {
   waiting: "ждёт ответа",
+  overdue: "ответа нет 30 с — кнопка «Разбудить сессию» внизу экрана",
   seen: "Claude увидел, пишет…",
   resent: "разбудил ещё раз, жду",
   silent: "сессия молчит — загляни в терминал",
@@ -30,12 +31,7 @@ function ownerLine(l) {
   if (l.seenIn != null) facts.push("увидел за " + l.seenIn + " с");
   if (l.answeredIn != null) facts.push("ответ за " + l.answeredIn + " с");
   box.append(el("span", "who", facts.filter(Boolean).join(" · ")), el("span", "", l.text));
-  if (l.status === "overdue") {
-    const b = el("button", "alt wake", "Ответа нет 30 с — разбудить сессию");
-    b.type = "button";
-    b.dataset.resend = l.id;
-    box.append(b);
-  } else if (STATUS[l.status]) {
+  if (STATUS[l.status]) {
     box.append(el("span", "status " + l.status, STATUS[l.status]));
   }
   return box;
@@ -65,6 +61,18 @@ export function render(v) {
   log.replaceChildren(...(v.lines.length
     ? v.lines.map(l => (l.from === "claude" ? claudeLine(l) : ownerLine(l)))
     : [el("div", "empty", "Здесь появятся твои строки и ответы Claude.")]));
+
+  // The wake button lives in a bar pinned to the bottom of the screen, so a long log can never
+  // scroll it out of sight. It names the oldest line still waiting past 30 s.
+  const overdue = v.lines.find(l => l.status === "overdue");
+  $("wakebar").hidden = !overdue;
+  document.body.classList.toggle("has-wakebar", !!overdue);
+  if (overdue) {
+    const short = overdue.text.length > 40 ? overdue.text.slice(0, 40) + "…" : overdue.text;
+    $("wake-text").textContent = "«" + short + "» — 30 с без ответа";
+    $("wake").dataset.resend = overdue.id;
+    $("wake").disabled = false;
+  }
 
   $("alerts").replaceChildren(...v.alerts.map(a => el("div", "alert", a)));
   $("note").textContent = v.note;

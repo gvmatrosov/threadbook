@@ -44,5 +44,12 @@ button { font: inherit; font-weight: 600; background: var(--accent); color: var(
   border-radius: 8px; padding: 8px 18px; cursor: pointer; }
 button:disabled { opacity: .5; cursor: default; }
 button.alt { background: var(--card); color: var(--accent); border: 1px solid var(--accent); }
-button.wake { align-self: flex-start; font-size: 14px; padding: 6px 12px; white-space: normal; }
+.status.overdue { color: var(--alert); }
+.wakebar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: flex; gap: 10px;
+  align-items: center; justify-content: center; flex-wrap: wrap; padding: 10px 16px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom)); background: var(--card);
+  border-top: 2px solid var(--alert); font-size: 14px; }
+.wakebar[hidden] { display: none; }
+.wakebar span { min-width: 0; overflow-wrap: anywhere; }
+body.has-wakebar { padding-bottom: 96px; }
 .note { font-size: 13px; color: var(--muted); }
