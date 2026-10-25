@@ -1,14 +1,16 @@
-// Автотест страницы тетради: drives skills/notebook/page/wire.js with a fake db, fake comments and
-// a fake clock — measure → act → measure, no browser.
+// Автотест страницы тетради: drives the page's DOM-free modules (wire.js — delivery, actions.js —
+// what the person does to cards, local.js — this browser's memory) with a fake db, fake comments,
+// a fake clock and a fake storage — measure → act → measure, no browser.
 //   node tools/test-page.js           run the checks
-//   node tools/test-page.js --porcha  порча: break wire.js one line at a time; every break must turn
-//                                     at least one check red, or that check is false comfort
+//   node tools/test-page.js --porcha  порча: break those modules one line at a time; every break must
+//                                     turn at least one check red, or that check is false comfort
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { pathToFileURL } = require("url");
 
-const WIRE = path.join(__dirname, "../skills/notebook/page/wire.js");
+const PAGE = path.join(__dirname, "../skills/notebook/page");
+const MODULES = ["wire.js", "actions.js", "local.js"];
 
 function fakes() {
   let t = 1_000_000, seq = 0;
@@ -32,7 +34,14 @@ function fakes() {
   const push = () => onRows([...rows.values()].sort((a, b) => a.at - b.at));
   const store = {
     newId: () => "L" + ++seq,
-    addOwner: async (id, item, text, via, mode, at) => { rows.set(id, { id, from: "owner", item, text, via, mode, at }); push(); },
+    addOwner: async row => { rows.set(row.id, { from: "owner", ...row }); push(); },
+    patched: [],
+    patchItem: async (id, patch) => { store.patched.push([id, patch]); },
+    newItemId: () => "N" + ++seq,
+    added: [],
+    addItem: async (id, title, order) => { store.added.push({ id, title, order }); },
+    titles: [],
+    saveTitle: async t => { store.titles.push(t); },
     markResent: async (id, at) => { rows.get(id).resentAt = at; push(); },
     threadsSaved: [],
     saveThread: async (item, id) => { store.threadsSaved.push(item + "=" + id); },
@@ -53,6 +62,7 @@ function fakes() {
 }
 
 const tick = () => new Promise(r => setImmediate(r));
+const memStorage = () => { const m = new Map(); return { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)) }; };
 const note = s => s.view().items[0].note;
 
 async function setup(createWire, hotFor) {
@@ -61,7 +71,7 @@ async function setup(createWire, hotFor) {
   const wire = createWire({ store: f.store, comments: f.comments, anchorOf: item => "card-" + item, clock: f.clock,
     onChange: v => { last = v; } });
   f.setOnRows(wire.setRows);
-  wire.setItems([{ id: "i1", title: "Первый", text: "вступление" }, { id: "i2", title: "Второй", text: "" }]);
+  wire.setItems([{ id: "i1", title: "Первый", text: "вступление", order: 1 }, { id: "i2", title: "Второй", text: "", order: 2 }]);
   wire.setState({ hotUntil: f.clock.now() + hotFor });
   return { ...f, wire, view: () => last };
 }
@@ -196,69 +206,216 @@ const checks = [
     s.wire.setRows([...s.rows.values()]);
     return clean && s.view().alerts.some(a => a.includes("X"));
   }],
+  ["длина ответа: строка несёт длину своего пункта, по умолчанию «по делу»", async W => {
+    const s = await setup(W, 60000);
+    s.wire.setItems([{ id: "i1", title: "А", order: 1, length: "short" }, { id: "i2", title: "Б", order: 2 }]);
+    await s.wire.send("i1", "коротко"); await tick();
+    await s.wire.send("i2", "обычно"); await tick();
+    return s.rows.get("L1").length === "short" && s.rows.get("L2").length === "normal"
+      && s.view().items[0].length === "short";
+  }],
+  ["«сжать лист»: одна строка-запрос в пункт листа, с именами помеченных пунктов", async W => {
+    const s = await setup(W, -1);
+    s.wire.setItems([{ id: "i1", title: "Первый", order: 1, squeeze: "marked" }, { id: "i2", title: "Второй", order: 2 }]);
+    const ok = await s.wire.askSqueeze(); await tick();
+    const row = s.rows.get("L1");
+    const busy = s.view().sheet.squeezing;
+    const again = await s.wire.askSqueeze(); await tick();
+    return ok && !again && row.kind === "squeeze" && row.item === "sheet" && row.text.includes("1. Первый")
+      && !row.text.includes("Второй") && s.sent.length === 1 && s.sent[0].anchor.path === "#card-sheet"
+      && busy && s.view().alerts.length === 0;
+  }],
+  ["«сжать лист» без пометок ничего не шлёт", async W => {
+    const s = await setup(W, -1);
+    const ok = await s.wire.askSqueeze(); await tick();
+    return !ok && s.sent.length === 0 && s.rows.size === 0 && s.view().sheet.marked === 0;
+  }],
+  ["ответ на «сжать лист» снимает «сжимаю» и показывается под шапкой", async W => {
+    const s = await setup(W, 60000);
+    s.wire.setItems([{ id: "i1", title: "Первый", order: 1, squeeze: "marked" }]);
+    await s.wire.askSqueeze(); await tick();
+    s.claudeRow({ id: "re-L1", replyTo: "L1", item: "sheet", typing: true, text: "" });
+    const typing = s.view().sheet.squeezing;
+    s.claudeRow({ id: "re-L1", replyTo: "L1", item: "sheet", text: "Сжал 1 пункт" });
+    return typing && !s.view().sheet.squeezing && s.view().sheet.reply === "Сжал 1 пункт";
+  }],
+  ["датчик «сжатый пункт с выводами»: сжат без выводов — тревога", async W => {
+    const s = await setup(W, 60000);
+    s.wire.setItems([{ id: "i1", title: "Первый", order: 1, squeeze: "done", summary: "итог" }]);
+    const clean = s.view().alerts.length === 0 && s.view().items[0].summary === "итог";
+    s.wire.setItems([{ id: "i1", title: "Первый", order: 1, squeeze: "done" }]);
+    return clean && s.view().alerts.some(a => a.includes("без выводов"));
+  }],
+  ["удалённый пункт пропадает со страницы, а его строки не считаются потерянными", async W => {
+    const s = await setup(W, 60000);
+    await s.wire.send("i2", "во второй"); await tick();
+    s.wire.setItems([{ id: "i1", title: "Первый", order: 1 }, { id: "i2", title: "Второй", order: 2, hidden: true }]);
+    const v = s.view();
+    return v.items.length === 1 && v.items[0].id === "i1" && v.alerts.length === 0;
+  }],
+  ["колёсико на пункте: горит, пока строка ждёт, гаснет с ответом", async W => {
+    const s = await setup(W, 60000);
+    await s.wire.send("i1", "жду"); await tick();
+    const on = s.view().items[0].pending && !s.view().items[1].pending;
+    s.claudeRow({ id: "re-L1", replyTo: "L1", text: "ответ", at: 1234 });
+    const c = s.view().items[0];
+    return on && !c.pending && c.lastAnswerAt === 1234;
+  }],
+  ["кнопки пункта: длина, пометка, переименование, удаление пишут в базу и проверяют ввод", async (W, A) => {
+    const s = await setup(W, 60000);
+    const a = A.createActions({ store: s.store, getItems: s.wire.allItems });
+    const r = [
+      await a.setLength("i1", "long"), await a.setLength("i1", "огромно"), await a.setLength("nope", "short"),
+      await a.markSqueeze("i2", true), await a.markSqueeze("i2", false),
+      await a.rename("i1", "  Новое   имя "), await a.rename("i1", "   "), await a.rename("i1", "x".repeat(201)),
+      await a.hide("i2"),
+    ];
+    const p = JSON.stringify(s.store.patched);
+    return r.join() === "true,false,false,true,true,true,false,false,true" && p === JSON.stringify([
+      ["i1", { length: "long" }], ["i2", { squeeze: "marked" }], ["i2", { squeeze: "none" }],
+      ["i1", { title: "Новое имя" }], ["i2", { hidden: true }]]);
+  }],
+  ["удалённый пункт больше не принимает кнопки", async (W, A) => {
+    const s = await setup(W, 60000);
+    s.wire.setItems([{ id: "i1", title: "А", order: 1, hidden: true }]);
+    const a = A.createActions({ store: s.store, getItems: s.wire.allItems });
+    const r = [await a.setLength("i1", "short"), await a.rename("i1", "Б"), await a.hide("i1")];
+    return r.every(x => x === false) && s.store.patched.length === 0;
+  }],
+  ["новый пункт берёт следующий номер, даже после удалённого", async (W, A) => {
+    const s = await setup(W, 60000);
+    s.wire.setItems([{ id: "i1", title: "А", order: 1 }, { id: "i5", title: "Удалён", order: 5, hidden: true }]);
+    const a = A.createActions({ store: s.store, getItems: s.wire.allItems });
+    const id = await a.addItem("  Свой вопрос ");
+    const empty = await a.addItem("  ");
+    return id && empty === null && JSON.stringify(s.store.added) === JSON.stringify([{ id, title: "Свой вопрос", order: 6 }]);
+  }],
+  ["переименование листа: своё имя сохраняется и побеждает имя от сессии", async (W, A) => {
+    const s = await setup(W, 60000);
+    s.wire.setState({ title: "От сессии", hotUntil: 0 });
+    const a = A.createActions({ store: s.store, getItems: s.wire.allItems });
+    const ok = await a.renameSheet(" Мой лист ");
+    const bad = await a.renameSheet("");
+    const before = s.view().title;
+    s.wire.setTitle(s.store.titles[0]);
+    return ok && !bad && before === "От сессии" && s.view().title === "Мой лист" && s.store.titles.length === 1;
+  }],
+  ["черновик и раскрытые пункты переживают перезагрузку страницы", async (W, A, L) => {
+    const st = memStorage();
+    const a = L.createLocal(st, () => 100);
+    a.setDraft("i1", "недописано"); a.toggle("i2");
+    const b = L.createLocal(st, () => 200);
+    const kept = b.draft("i1") === "недописано" && b.isOpen("i2") && !b.isOpen("i1");
+    b.setDraft("i1", ""); b.toggle("i2");
+    const c = L.createLocal(st, () => 300);
+    return kept && c.draft("i1") === "" && !c.isOpen("i2");
+  }],
+  ["красная точка: новый ответ в закрытом пункте, гаснет, когда пункт открыт", async (W, A, L) => {
+    const st = memStorage();
+    const loc = L.createLocal(st, () => 1000);
+    const old = { id: "i1", lastAnswerAt: 900 }, fresh = { id: "i1", lastAnswerAt: 1500 };
+    const r1 = !loc.unread(old) && loc.unread(fresh);
+    loc.toggle("i1");
+    const r2 = !loc.unread(fresh);
+    loc.markSeen(fresh); loc.toggle("i1");
+    const r3 = !loc.unread(fresh) && loc.unread({ id: "i1", lastAnswerAt: 1600 });
+    return r1 && r2 && r3;
+  }],
+  ["хранилище браузера запрещено: страница работает, просто не помнит", async (W, A, L) => {
+    const boom = { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); } };
+    const loc = L.createLocal(boom, () => 1);
+    loc.setDraft("i1", "x"); loc.toggle("i1");
+    return loc.draft("i1") === "x" && loc.isOpen("i1");
+  }],
 ];
 
-async function runAll(wireFile, quiet) {
-  const { createWire } = await import(pathToFileURL(wireFile).href + "?" + Math.random());
+async function runAll(dir, quiet) {
+  const q = "?" + Math.random();
+  const load = f => import(pathToFileURL(path.join(dir, f)).href + q);
+  const [W, A, L] = await Promise.all(MODULES.map(load));
   const results = [];
   for (const [name, fn] of checks) {
     let ok = false;
-    try { ok = await fn(createWire); } catch (e) { ok = false; }
+    try { ok = await fn(W.createWire, A, L); } catch (e) { ok = false; }
     results.push([name, ok]);
     if (!quiet) console.log((ok ? "  зелёный  " : "  КРАСНЫЙ  ") + name);
   }
   return results;
 }
 
-// Each break: [what it simulates, exact text in wire.js, replacement].
+// Each break: [module, what it simulates, exact text in that module, replacement].
 const breaks = [
-  ["горячее/холодное перепутаны", "(state.hotUntil || 0) > now()", "(state.hotUntil || 0) < now()"],
-  ["горячая строка всё равно будит комментарием", "hot || !comments ? null", "!comments ? null"],
-  ["повтор можно жать сколько угодно", "if (!w || w.resent ||", "if (!w ||"],
-  ["страница сама шлёт повтор по таймеру", "if (w.resent) w.silent = true; else w.overdue = true;",
+  ["wire.js", "горячее/холодное перепутаны", "(state.hotUntil || 0) > now()", "(state.hotUntil || 0) < now()"],
+  ["wire.js", "горячая строка всё равно будит комментарием", "hot || !comments ? null", "!comments ? null"],
+  ["wire.js", "повтор можно жать сколько угодно", "if (!w || w.resent ||", "if (!w ||"],
+  ["wire.js", "страница сама шлёт повтор по таймеру", "if (w.resent) w.silent = true; else w.overdue = true;",
     "if (w.resent) w.silent = true; else { w.overdue = true; resend(id); }"],
-  ["любой ответ гасит все строки", 'r.from === "claude" && r.replyTo === id', 'r.from === "claude"'],
-  ["«пишет…» показан как готовый ответ", 'status = "seen"', 'status = "answered"'],
-  ["датчик двойного ответа молчит", 'alerts.push("Лишний ответ на строку " + r.replyTo)', "0"],
-  ["в комментарии нет метки строки", "text + tail(id)", "text"],
-  ["режим не влияет на горячее окно", 'mode === "flash" && (state.hotUntil', '(state.hotUntil'],
-  ["строка не несёт метку режима", 'hot ? "db" : "comment", mode, now()', 'hot ? "db" : "comment", undefined, now()'],
-  ["переключатель не сохраняет выбор", "try { await store.saveMode(m); }", "try { }"],
-  ["подсказка о лимите на любую ошибку", 'code(e) === "rate_limited" ? LIMIT', 'true ? LIMIT'],
-  ["строка уходит не в свой пункт", "await store.addOwner(id, item, text", 'await store.addOwner(id, "i1", text'],
-  ["все пункты пишут в одну ветку", "const t = threads[item];", "const t = Object.values(threads)[0];"],
-  ["ветка с прошлого визита забыта", "for (const k in map) threads[k] = threads[k] || map[k];", ""],
-  ["датчик строки вне пунктов молчит", 'alerts.push("Строка вне пунктов: " + l.id)', "0"],
-  ["лента пункта показывает все строки", "lines: lines.filter(l => l.item === i.id)", "lines"],
-  ["старые строки без ответа забыты", "wait(r.id, ANSWER_WAIT_MS - (now() - (r.at || 0)), !!r.resentAt);", ""],
+  ["wire.js", "любой ответ гасит все строки", 'r.from === "claude" && r.replyTo === id', 'r.from === "claude"'],
+  ["wire.js", "«пишет…» показан как готовый ответ", 'status = "seen"', 'status = "answered"'],
+  ["wire.js", "датчик двойного ответа молчит", 'alerts.push("Лишний ответ на строку " + r.replyTo)', "0"],
+  ["wire.js", "в комментарии нет метки строки", "text + tail(id)", "text"],
+  ["wire.js", "режим не влияет на горячее окно", 'mode === "flash" && (state.hotUntil', '(state.hotUntil'],
+  ["wire.js", "строка не несёт метку режима", 'via: hot ? "db" : "comment", mode,', 'via: hot ? "db" : "comment",'],
+  ["wire.js", "переключатель не сохраняет выбор", "try { await store.saveMode(m); }", "try { }"],
+  ["wire.js", "подсказка о лимите на любую ошибку", 'code(e) === "rate_limited" ? LIMIT', 'true ? LIMIT'],
+  ["wire.js", "строка уходит не в свой пункт", "const row = { id, item, text,", 'const row = { id, item: "i1", text,'],
+  ["wire.js", "все пункты пишут в одну ветку", "const t = threads[item];", "const t = Object.values(threads)[0];"],
+  ["wire.js", "ветка с прошлого визита забыта", "for (const k in map) threads[k] = threads[k] || map[k];", ""],
+  ["wire.js", "датчик строки вне пунктов молчит", 'alerts.push("Строка вне пунктов: " + l.id)', "0"],
+  ["wire.js", "лента пункта показывает все строки", "const own = lines.filter(l => l.item === i.id);", "const own = lines;"],
+  ["wire.js", "старые строки без ответа забыты", "wait(r.id, ANSWER_WAIT_MS - (now() - (r.at || 0)), !!r.resentAt);", ""],
+  ["wire.js", "строка не несёт длину пункта", "length: lengthOf(item), at", 'length: "normal", at'],
+  ["wire.js", "«сжать лист» шлёт все пункты, а не помеченные", '!i.hidden && i.squeeze === "marked"', "!i.hidden"],
+  ["wire.js", "«сжать лист» можно жать, пока прошлое не сжато", "if (!marked.length || squeezing())", "if (!marked.length)"],
+  ["wire.js", "запрос сжатия без метки вида", "if (kind) row.kind = kind;", ""],
+  ["wire.js", "«сжимаю» не гаснет после ответа", "!(replyOf(r.id) && !replyOf(r.id).typing)", "true"],
+  ["wire.js", "датчик сжатого без выводов молчит", 'alerts.push("Пункт сжат без выводов: " + (i.title || i.id))', "0"],
+  ["wire.js", "удалённый пункт виден", "items.filter(i => !i.hidden).map(", "items.map("],
+  ["wire.js", "строки удалённого пункта считаются потерянными", "const known = new Set([SHEET, ...items.map(i => i.id)]);",
+    "const known = new Set([SHEET, ...items.filter(i => !i.hidden).map(i => i.id)]);"],
+  ["wire.js", "колёсико не гаснет", 'own.some(l => l.from === "owner" && PENDING.has(l.status))', 'own.some(l => l.from === "owner")'],
+  ["actions.js", "длина принимает что угодно", "!exists(id) || !LENGTHS.includes(length)", "!exists(id)"],
+  ["actions.js", "пометка сжатия перевёрнута", 'squeeze: on ? "marked" : "none"', 'squeeze: on ? "none" : "marked"'],
+  ["actions.js", "пустое имя пункта принимается", "if (!exists(id) || !t || t.length > MAX_TITLE) return false;", "if (!exists(id)) return false;"],
+  ["actions.js", "имя пункта не чистится от пробелов", 'String(t || "").trim().replace(/\\s+/g, " ")', 'String(t || "")'],
+  ["actions.js", "удалённый пункт принимает кнопки", "i.id === id && !i.hidden", "i.id === id"],
+  ["actions.js", "удаление стирает, а не прячет", "{ hidden: true }", "{ title: \"\" }"],
+  ["actions.js", "новый пункт занимает номер удалённого", "getItems().reduce(", "getItems().filter(i => !i.hidden).reduce("],
+  ["actions.js", "имя листа не сохраняется", "await store.saveTitle(t);", ""],
+  ["local.js", "черновик не сохраняется в браузер", "const save = () => { try {", "const save = () => { return; try {"],
+  ["local.js", "точка горит и в открытом пункте", "!data.open.includes(card.id) && card.lastAnswerAt", "card.lastAnswerAt"],
+  ["local.js", "открытие пункта не гасит точку", "data.seen[card.id] = card.lastAnswerAt; save();", "save();"],
+  ["local.js", "первый визит: всё старое горит точками", "card.lastAnswerAt > (data.seen[card.id] || data.since)", "card.lastAnswerAt > (data.seen[card.id] || 0)"],
+  ["local.js", "запрет хранилища роняет страницу", 'try { storage.setItem(KEY, JSON.stringify(data)); } catch (e) { /* forget on reload */ }', "storage.setItem(KEY, JSON.stringify(data));"],
 ];
 
 async function porcha() {
-  const src = fs.readFileSync(WIRE, "utf8");
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tetrad-porcha-"));
   let bad = 0;
-  for (const [what, from, to] of breaks) {
-    if (!src.includes(from)) { console.log("  НЕТ СТРОКИ  " + what); bad++; continue; }
-    const file = path.join(dir, "wire-" + breaks.indexOf(breaks.find(b => b[0] === what)) + ".js");
-    fs.writeFileSync(file, src.split(from).join(to));
+  for (const [mod, what, from, to] of breaks) {
+    const src = fs.readFileSync(path.join(PAGE, mod), "utf8");
+    if (!src.includes(from)) { console.log("  НЕТ СТРОКИ  " + mod + ": " + what); bad++; continue; }
+    // A fresh folder per break: the broken module next to intact copies of the others.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tetrad-porcha-"));
+    for (const m of MODULES) fs.copyFileSync(path.join(PAGE, m), path.join(dir, m));
+    fs.writeFileSync(path.join(dir, mod), src.split(from).join(to));
     let results;
-    try { results = await runAll(file, true); }
-    catch (e) { console.log("  НЕ ГРУЗИТСЯ " + what + ": " + e.message.split("\n")[0]); bad++; continue; }
+    try { results = await runAll(dir, true); }
+    catch (e) { console.log("  НЕ ГРУЗИТСЯ " + what + ": " + e.message.split("\n")[0]); bad++; fs.rmSync(dir, { recursive: true, force: true }); continue; }
+    fs.rmSync(dir, { recursive: true, force: true });
     const red = results.filter(([, ok]) => !ok).map(([n]) => n);
     if (red.length) console.log("  поймана   " + what + " → красный: " + red[0] + (red.length > 1 ? " (+" + (red.length - 1) + ")" : ""));
     else { console.log("  ПРОПУЩЕНА " + what); bad++; }
   }
-  fs.rmSync(dir, { recursive: true, force: true });
   return bad;
 }
 
 (async () => {
   if (process.argv.includes("--porcha")) {
     const missed = await porcha();
-    console.log(missed ? "\nпорча: пропущено " + missed : "\nпорча: все поломки пойманы");
+    console.log(missed ? "\nпорча: пропущено " + missed : "\nпорча: все " + breaks.length + " поломок пойманы");
     process.exit(missed ? 1 : 0);
   }
-  const red = (await runAll(WIRE, false)).filter(([, ok]) => !ok).length;
-  console.log(red ? "\nпрогон красный: " + red : "\nпрогон зелёный");
+  const red = (await runAll(PAGE, false)).filter(([, ok]) => !ok).length;
+  console.log(red ? "\nпрогон красный: " + red : "\nпрогон зелёный: " + checks.length + " проверок");
   process.exit(red ? 1 : 0);
 })();

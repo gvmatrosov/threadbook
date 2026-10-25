@@ -1,19 +1,40 @@
 <title>Тетрадь</title>
 <link rel="stylesheet" href="style.css">
 
-<div class="sheet">
-  <h1 id="title">Тетрадь</h1>
-  <div class="state" id="state">Подключаюсь…</div>
-  <div class="modes" id="modes" role="radiogroup" aria-label="Режим тетради">
-    <button type="button" role="radio" data-mode="flash" aria-checked="true">
-      <b>flash</b><span>ответ за ~10 с, тратит немного Haiku</span></button>
-    <button type="button" role="radio" data-mode="econom" aria-checked="false">
-      <b>econom</b><span>ответ за ~40 с, без доп. расходов</span></button>
-  </div>
+<main class="sheet">
+  <header class="sheethead" id="head">
+    <div class="titlerow" id="titleRow">
+      <h1 id="title">Тетрадь</h1>
+      <button type="button" class="linkbtn" data-act="rename" data-id="sheet">переименовать</button>
+    </div>
+    <form class="inline" id="renSheetForm" data-form="rename" data-id="sheet" hidden>
+      <input id="renSheet" maxlength="200" aria-label="Название листа">
+      <button type="submit">Сохранить</button>
+      <button type="button" class="quiet" data-act="cancelRename" data-id="sheet">Отмена</button>
+    </form>
+    <div class="state" id="state">Подключаюсь…</div>
+    <div class="modes" id="modes" role="radiogroup" aria-label="Режим тетради">
+      <button type="button" role="radio" data-mode="flash" aria-checked="true">
+        <b>flash</b><span>ответ за ~10 с, тратит немного Haiku</span></button>
+      <button type="button" role="radio" data-mode="econom" aria-checked="false">
+        <b>econom</b><span>ответ за ~40 с, без доп. расходов</span></button>
+    </div>
+    <div class="row">
+      <button type="button" class="chip" id="squeeze" data-act="squeezeSheet" disabled>🗜 сжать лист</button>
+      <span class="note" id="squeezeNote"></span>
+    </div>
+  </header>
   <div id="alerts"></div>
 
   <div class="items" id="items"><div class="empty">Подключаюсь…</div></div>
-</div>
+
+  <button type="button" class="add" id="addItem" data-act="add">＋ Пункт</button>
+  <form class="inline card" id="addForm" data-form="add" hidden>
+    <input id="addTitle" maxlength="200" placeholder="Название пункта" autocomplete="off" aria-label="Название пункта">
+    <button type="submit">Завести</button>
+    <button type="button" class="quiet" data-act="cancelAdd">Отмена</button>
+  </form>
+</main>
 
 <div class="wakebar" id="wakebar" hidden>
   <span id="wake-text"></span>

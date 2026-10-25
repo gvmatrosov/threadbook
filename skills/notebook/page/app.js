@@ -1,21 +1,41 @@
-// Boot: reach db and comments, wire the store to the wire and the wire to the screen.
+// Boot: reach db and comments, wire the store to the wire and the wire to the screen. Every tap is
+// caught by one listener on the document through data-act / data-form, so redraws never lose handlers.
 import { createStore } from "./store.js";
 import { createWire } from "./wire.js";
+import { createActions } from "./actions.js";
+import { createLocal } from "./local.js";
 import { render, renderAbsent, sectionOf } from "./render.js";
 
 const $ = id => document.getElementById(id);
 const CAN_SEND_EVERY_MS = 20000; // a read: posts nothing, never prompts
+const CONFIRM_MS = 4000;
+
+let storage = null;
+try { storage = window.localStorage; } catch (e) { storage = null; }
+const memory = new Map();
+const local = createLocal(storage || { getItem: k => memory.get(k) ?? null, setItem: (k, v) => memory.set(k, v) }, Date.now);
+const ui = { local, renaming: new Set(), unfolded: new Set(), confirmHide: new Set(), adding: false };
 
 async function start() {
   const [db, comments] = await Promise.all([claude.use("db"), claude.use("comments")]);
   if (!db) return renderAbsent("Хранилище недоступно: открой страницу на claude.ai, войдя в свой аккаунт.");
 
   const store = createStore(db);
+  let last = null;
+  const draw = v => {
+    last = v;
+    render(v, ui);
+    // An answer landing in an open card is read on the spot.
+    for (const c of v.items) if (local.isOpen(c.id)) local.markSeen(c);
+  };
   const wire = createWire({
     store, comments, anchorOf: sectionOf,
     clock: { now: Date.now, later: setTimeout, cancel: clearTimeout },
-    onChange: render,
+    onChange: draw,
   });
+  const actions = createActions({ store, getItems: wire.allItems });
+  const redraw = () => last && draw(last);
+  const fail = e => { $("alerts").append(Object.assign(document.createElement("div"), { className: "alert", textContent: "Не сохранилось (" + ((e && e.code) || e) + ")." })); };
 
   const checkCanSend = async () => {
     if (!comments) return wire.setCanSend("off");
@@ -26,22 +46,83 @@ async function start() {
   store.watchItems(wire.setItems, () => {});
   store.watchState(wire.setState, () => {});
   store.watchMode(wire.setMode, () => {});
+  store.watchTitle(wire.setTitle, () => {});
   store.getThreads().then(wire.setThreads, () => {});
   checkCanSend();
   setInterval(checkCanSend, CAN_SEND_EVERY_MS);
 
-  // Every item card has its own form; one listener on the container serves them all.
-  $("items").addEventListener("submit", ev => {
-    const form = ev.target.closest("form[data-item]");
+  const act = {
+    toggle(id) { local.toggle(id); redraw(); },
+    length(id, b) { actions.setLength(id, b.dataset.length).catch(fail); },
+    squeeze(id) {
+      const card = last && last.items.find(c => c.id === id);
+      if (card) actions.markSqueeze(id, card.squeeze === "none").catch(fail);
+    },
+    fold(id) { if (ui.unfolded.has(id)) ui.unfolded.delete(id); else ui.unfolded.add(id); redraw(); },
+    rename(id) { ui.renaming.add(id); redraw(); (id === "sheet" ? $("renSheet") : document.querySelector(`[data-form="rename"][data-id="${id}"] input`))?.focus(); },
+    cancelRename(id) { ui.renaming.delete(id); redraw(); },
+    // Two taps: the first arms the button for a few seconds, the second hides the card.
+    hide(id) {
+      if (!ui.confirmHide.has(id)) {
+        ui.confirmHide.add(id); redraw();
+        setTimeout(() => { ui.confirmHide.delete(id); redraw(); }, CONFIRM_MS);
+        return;
+      }
+      ui.confirmHide.delete(id);
+      actions.hide(id).catch(fail);
+    },
+    add() { ui.adding = true; redraw(); $("addTitle").focus(); },
+    cancelAdd() { ui.adding = false; redraw(); },
+    squeezeSheet() { wire.askSqueeze().then(checkCanSend); },
+  };
+
+  document.addEventListener("click", ev => {
+    const b = ev.target.closest("[data-act]");
+    if (!b || !act[b.dataset.act]) return;
+    ev.preventDefault();
+    act[b.dataset.act](b.dataset.id, b);
+  });
+
+  document.addEventListener("submit", ev => {
+    const form = ev.target.closest("form[data-form]");
     if (!form) return;
     ev.preventDefault();
-    const box = form.querySelector("textarea"), text = box.value.trim();
-    if (!text) return;
-    box.value = "";
-    wire.send(form.dataset.item, text).then(ok => { if (!ok && !box.value) box.value = text; checkCanSend(); });
+    const id = form.dataset.id, input = form.querySelector("textarea, input");
+    if (form.dataset.form === "say") {
+      // wire.send runs inside the tap: the comment must start before anything is awaited.
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+      local.setDraft(id, "");
+      wire.send(id, text).then(ok => {
+        if (!ok && !input.value) { input.value = text; local.setDraft(id, text); }
+        checkCanSend();
+      });
+    } else if (form.dataset.form === "rename") {
+      const done = id === "sheet" ? actions.renameSheet(input.value) : actions.rename(id, input.value);
+      done.then(ok => { if (ok) { ui.renaming.delete(id); redraw(); } }, fail);
+    } else if (form.dataset.form === "add") {
+      actions.addItem(input.value).then(newId => {
+        if (!newId) return;
+        input.value = "";
+        ui.adding = false;
+        if (!local.isOpen(newId)) local.toggle(newId);
+        redraw();
+      }, fail);
+    }
   });
-  $("items").addEventListener("keydown", ev => {
-    if (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey) && ev.target.form) ev.target.form.requestSubmit();
+
+  document.addEventListener("input", ev => {
+    const form = ev.target.closest("form[data-form='say']");
+    if (form) local.setDraft(form.dataset.id, ev.target.value);
+  });
+  document.addEventListener("keydown", ev => {
+    if (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey) && ev.target.form) { ev.preventDefault(); ev.target.form.requestSubmit(); }
+    if (ev.key === "Escape" && ev.target.form) {
+      const f = ev.target.form;
+      if (f.dataset.form === "rename") act.cancelRename(f.dataset.id);
+      if (f.dataset.form === "add") act.cancelAdd();
+    }
   });
   $("wake").addEventListener("click", ev => {
     const b = ev.currentTarget;
