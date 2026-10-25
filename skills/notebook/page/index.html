@@ -4,6 +4,12 @@
 <div class="sheet">
   <h1 id="title">Тетрадь</h1>
   <div class="state" id="state">Подключаюсь…</div>
+  <div class="modes" id="modes" role="radiogroup" aria-label="Режим тетради">
+    <button type="button" role="radio" data-mode="flash" aria-checked="true">
+      <b>flash</b><span>ответ за ~10 с, тратит немного Haiku</span></button>
+    <button type="button" role="radio" data-mode="econom" aria-checked="false">
+      <b>econom</b><span>ответ за ~40 с, без доп. расходов</span></button>
+  </div>
   <div id="alerts"></div>
 
   <section class="card" id="item1">

@@ -18,8 +18,15 @@ page's database (`db`) and reaches you by one of two wires:
 If no answer (not even «Claude пишет…») shows within 30 s, the page offers the person a one-tap
 «разбудить сессию» that re-sends the line by comment, once.
 
+Two modes, chosen by the person and switchable on the page at any time:
+- **flash** — both wires as above: hot lines in ~10 s, a little Haiku spent per line;
+- **econom** — comment wire only: no poller, no hot window, every line ~30–45 s, nothing extra spent.
+Every owner line carries the `mode` it was sent in; that, not your memory, decides step 3 below.
+
 ## 1. Publish (once per notebook)
 
+0. The person picks the mode. If their request did not name one, ask in one line:
+   «flash — ответ за ~10 с, тратит немного Haiku; econom — ~40 с, без доп. расходов. Какой?»
 1. Copy the page files from the `page/` folder next to this SKILL.md (its base directory is printed
    above) into a fresh folder in your scratchpad, e.g. `<scratchpad>/tetrad-page/`.
 2. Publish with the Artifact tool: `file_path` = that folder's `index.html`, `root` = that folder,
@@ -29,6 +36,8 @@ If no answer (not even «Claude пишет…») shows within 30 s, the page off
 3. Seed the sheet: ArtifactData `set` on collection `live`, doc `state`:
    `{"title": "<sheet title>", "itemTitle": "<item title>", "hotUntil": 0}`. Keep the `version`
    the result returns — every later write to `live/state` must pass it as `if_version`.
+   Also `set` `settings/mode` = `{"mode": "flash"}` or `{"mode": "econom"}` — the page owns this
+   doc from now on (the person switches it there); never write it again.
    If there is something to open the thread with, also `set` `messages/intro`:
    `{"from": "claude", "text": "<opening>", "at": <epoch ms>}`.
 4. Put the link on the person's clipboard if their setup has a way to (for example a `cop` command)
@@ -49,7 +58,8 @@ A line has arrived when a comment notification names this artifact (its text car
 2. At once, before thinking: `set` `messages/re-<id>` =
    `{"from": "claude", "replyTo": "<id>", "item": "item1", "typing": true, "text": "", "seenAt": <now>, "at": <now>}`.
    The page shows «Claude пишет…» and stops its 30-second alarm. Keep the returned version.
-3. Start the next poller now, before writing the answer — it needs ~15 s to warm up, and a line
+3. Only if the line's `mode` is "flash" (a line without `mode` counts as flash): start the next
+   poller now, before writing the answer — it needs ~15 s to warm up, and a line
    sent right after your answer must find it already polling. Agent tool, `subagent_type`
    "tetrad:poller", `run_in_background: true`, prompt:
    `url: <artifact url>. threshold: <the largest owner "at" you have seen>. polls: 24.`
@@ -58,7 +68,9 @@ A line has arrived when a comment notification names this artifact (its text car
 4. Write the answer. Then ONE ArtifactData `batch`:
    - `set` `messages/re-<id>` (with `if_version`) =
      `{"from": "claude", "replyTo": "<id>", "item": "item1", "text": "<answer>", "seenAt": <same as step 2>, "at": <now>}`;
-   - `update` `live/state` (with `if_version`) = `{"hotUntil": <now + 150000>}`.
+   - flash only: `update` `live/state` (with `if_version`) = `{"hotUntil": <now + 150000>}`.
+   In econom the batch is the answer alone, and a poller still running from an earlier flash line
+   is left to finish by itself.
 5. When a poller reports a row, go to step 1. When it reports "nothing new", the hot window is over:
    do nothing — the page has switched to the comment wire by itself.
 
@@ -79,4 +91,6 @@ A line has arrived when a comment notification names this artifact (its text car
   ArtifactComments `watch` with the url, confirm "auto-replies armed" in the listing, then do step 2
   for any unanswered lines.
 - The page works only opened at claude.ai (capabilities are absent elsewhere).
-- Comments are capped at 60 per artifact per hour; the hot wire spends none.
+- claude.ai caps wake-up comments at 60 per artifact per hour; the hot wire spends none. When the cap
+  is hit the page tells the person itself (only then, never in advance); lines keep landing in `db`
+  and you answer them on the next wake.

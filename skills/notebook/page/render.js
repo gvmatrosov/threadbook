@@ -49,10 +49,15 @@ export function render(v) {
   $("title").textContent = v.title;
   $("item-title").textContent = v.itemTitle;
 
+  for (const b of $("modes").querySelectorAll("[data-mode]")) {
+    b.setAttribute("aria-checked", String(b.dataset.mode === v.mode));
+  }
+
   const [cls, words] = SEND[v.canSend] || ["", "проверяю связь…"];
   const state = $("state");
   state.replaceChildren(
-    el("b", v.hot ? "good" : "", v.hot ? "разговор горячий" : "разговор остыл"),
+    el("b", v.hot ? "good" : "", v.mode === "econom" ? "econom: каждая строка будит сессию"
+      : v.hot ? "разговор горячий" : "разговор остыл"),
     document.createTextNode(" · "),
     el("b", cls, words),
   );

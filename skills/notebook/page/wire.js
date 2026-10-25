@@ -1,6 +1,7 @@
 // Which wire carries an owner line, and the safety net when no answer comes.
-//   HOT  — the session set live/state.hotUntil > now and its poller reads db: the line goes to db only.
-//   COLD — db plus a comment sent to Claude, which wakes the session (~30 s).
+//   HOT  — flash mode, and the session set live/state.hotUntil > now (its poller reads db): db only.
+//   COLD — db plus a comment sent to Claude, which wakes the session (~30 s). Econom mode is always
+//          cold: no poller at all. Each line carries the mode, so the session knows whether to start one.
 // No answer (not even «Claude пишет…») within ANSWER_WAIT_MS → the line offers a one-tap re-send,
 // once. It is a tap, not a timer: the platform takes sendToClaude only from the viewer's own gesture.
 // No DOM here, so tools/test-page.js drives it with a fake store, fake comments and a fake clock.
@@ -13,15 +14,20 @@ export const tail = id =>
   `\n\n[tetrad ${id}] Строка из тетради: ответ даст живая сессия прямо в пункте. ` +
   "Здесь ответь одним словом «принято», без вопросов.";
 
+export const MODES = ["flash", "econom"];
 const code = e => (e && (e.code || e.message)) || String(e);
+// Shown only once claude.ai has actually refused a wake-up — never as a warning in advance.
+const LIMIT = "claude.ai даёт будить сессию комментарием не чаще 60 раз в час — лимит исчерпан. " +
+  "Строка записана, сессия прочтёт её при следующем пробуждении. В полной версии тетради такого лимита нет.";
+const failNote = (what, e) => (code(e) === "rate_limited" ? LIMIT : what + " (" + code(e) + ").");
 
 export function createWire({ store, comments, anchorEl, clock, onChange }) {
   const { now, later, cancel } = clock;
-  let rows = [], state = {}, threadId = null, canSend = "…", note = "", hotTimer = null;
+  let rows = [], state = {}, mode = "flash", threadId = null, canSend = "…", note = "", hotTimer = null;
   const waits = new Map(); // owner row id → {timer, overdue, resent, silent}
 
   const replyOf = id => rows.find(r => r.from === "claude" && r.replyTo === id);
-  const isHot = () => (state.hotUntil || 0) > now();
+  const isHot = () => mode === "flash" && (state.hotUntil || 0) > now();
   const changed = () => onChange(view());
 
   function wait(id, ms, resent = false) {
@@ -51,7 +57,7 @@ export function createWire({ store, comments, anchorEl, clock, onChange }) {
     note = hot ? "Ушло в тетрадь — сессия на связи." : "Ушло и будит сессию, это около 30 секунд.";
     changed();
     try {
-      await store.addOwner(id, text, hot ? "db" : "comment", now());
+      await store.addOwner(id, text, hot ? "db" : "comment", mode, now());
     } catch (e) {
       cancel(waits.get(id).timer); waits.delete(id);
       note = "Строка не записалась (" + code(e) + "), текст оставлен в поле.";
@@ -62,7 +68,7 @@ export function createWire({ store, comments, anchorEl, clock, onChange }) {
       try { await wake; } catch (e) {
         const w = waits.get(id);
         if (w && !replyOf(id)) w.overdue = true;
-        note = "Разбудить сессию не удалось (" + code(e) + "). Строка в тетради.";
+        note = failNote("Разбудить сессию не удалось, строка в тетради", e);
       }
     }
     changed();
@@ -81,7 +87,7 @@ export function createWire({ store, comments, anchorEl, clock, onChange }) {
       await p;
       await store.markResent(id, now()).catch(() => {});
     } catch (e) {
-      note = "Разбудить не удалось (" + code(e) + "). Загляни в терминал.";
+      note = failNote("Разбудить не удалось, загляни в терминал", e);
     }
     changed();
     return true;
@@ -109,6 +115,20 @@ export function createWire({ store, comments, anchorEl, clock, onChange }) {
     changed();
   }
 
+  function setMode(m) { mode = MODES.includes(m) ? m : "flash"; changed(); }
+
+  // From the person's tap on the mode switch.
+  async function chooseMode(m) {
+    if (!MODES.includes(m) || m === mode) return;
+    const was = mode;
+    setMode(m);
+    try { await store.saveMode(m); } catch (e) {
+      mode = was;
+      note = "Режим не переключился (" + code(e) + ").";
+      changed();
+    }
+  }
+
   function setThread(id) { threadId = threadId || id; }
   function setCanSend(v) { canSend = v; changed(); }
 
@@ -129,8 +149,8 @@ export function createWire({ store, comments, anchorEl, clock, onChange }) {
         seenIn: reply ? secs(reply.seenAt) : null, answeredIn: reply && !reply.typing ? secs(reply.at) : null };
     });
     return { title: state.title || "Тетрадь", itemTitle: state.itemTitle || "Пункт 1",
-      hot: isHot(), canSend, note, lines, alerts };
+      mode, hot: isHot(), canSend, note, lines, alerts };
   }
 
-  return { send, resend, setRows, setState, setThread, setCanSend, view };
+  return { send, resend, setRows, setState, setMode, chooseMode, setThread, setCanSend, view };
 }

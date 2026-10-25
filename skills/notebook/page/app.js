@@ -24,6 +24,7 @@ async function start() {
 
   store.watchMessages(wire.setRows, e => renderAbsent("Связь с хранилищем оборвалась (" + e.code + "), обнови страницу."));
   store.watchState(wire.setState, () => {});
+  store.watchMode(wire.setMode, () => {});
   store.getThread().then(wire.setThread, () => {});
   checkCanSend();
   setInterval(checkCanSend, CAN_SEND_EVERY_MS);
@@ -43,6 +44,10 @@ async function start() {
     if (!b.dataset.resend) return;
     b.disabled = true;
     wire.resend(b.dataset.resend).then(checkCanSend);
+  });
+  $("modes").addEventListener("click", ev => {
+    const b = ev.target.closest("[data-mode]");
+    if (b) wire.chooseMode(b.dataset.mode);
   });
   $("send").disabled = false;
 }

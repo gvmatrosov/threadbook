@@ -32,14 +32,20 @@ function fakes() {
   const push = () => onRows([...rows.values()].sort((a, b) => a.at - b.at));
   const store = {
     newId: () => "L" + ++seq,
-    addOwner: async (id, text, via, at) => { rows.set(id, { id, from: "owner", text, via, at }); push(); },
+    addOwner: async (id, text, via, mode, at) => { rows.set(id, { id, from: "owner", text, via, mode, at }); push(); },
     markResent: async (id, at) => { rows.get(id).resentAt = at; push(); },
     saveThread: async () => {},
+    saved: [],
+    saveMode: async m => { store.saved.push(m); },
   };
   const sent = [];
   const comments = {
+    refuse: null, // set to an error code to make the next sends reject like claude.ai does
     anchorFor: async () => ({ path: "#item1", x: 0, y: 0 }),
-    sendToClaude: async target => { sent.push(target); return { threadId: "T1", commentId: "C" + sent.length }; },
+    sendToClaude: async target => {
+      if (comments.refuse) throw { code: comments.refuse, message: comments.refuse };
+      sent.push(target); return { threadId: "T1", commentId: "C" + sent.length };
+    },
   };
   const claudeRow = (row, extra = {}) => { rows.set(row.id, { from: "claude", at: t, ...row, ...extra }); push(); };
   return { clock, advance, store, comments, sent, claudeRow, rows, setOnRows: fn => { onRows = fn; } };
@@ -60,7 +66,30 @@ const checks = [
   ["горячий разговор: строка уходит только в базу, комментария нет", async W => {
     const s = await setup(W, 60000);
     await s.wire.send("раз"); await tick();
-    return s.sent.length === 0 && s.rows.get("L1").via === "db";
+    return s.sent.length === 0 && s.rows.get("L1").via === "db" && s.rows.get("L1").mode === "flash";
+  }],
+  ["econom: даже в горячем окне строка будит комментарием и несёт метку режима", async W => {
+    const s = await setup(W, 60000);
+    s.wire.setMode("econom");
+    await s.wire.send("эконом"); await tick();
+    return s.sent.length === 1 && s.rows.get("L1").mode === "econom" && s.view().hot === false;
+  }],
+  ["переключатель режима на странице сохраняет выбор, и следующая строка идёт по нему", async W => {
+    const s = await setup(W, 60000);
+    await s.wire.chooseMode("econom"); await tick();
+    await s.wire.send("после переключения"); await tick();
+    return s.store.saved.join() === "econom" && s.view().mode === "econom" && s.sent.length === 1;
+  }],
+  ["лимит комментариев: подсказка появляется только после отказа claude.ai", async W => {
+    const s = await setup(W, -1);
+    await s.wire.send("до лимита"); await tick();
+    const before = s.view().note.includes("60 раз в час");
+    s.comments.refuse = "upstream_error";
+    await s.wire.send("другая ошибка"); await tick();
+    const other = s.view().note.includes("60 раз в час");
+    s.comments.refuse = "rate_limited";
+    await s.wire.send("за лимитом"); await tick();
+    return !before && !other && s.view().note.includes("60 раз в час") && s.rows.has("L3");
   }],
   ["остывший разговор: строка уходит в базу и одним комментарием с меткой строки", async W => {
     const s = await setup(W, -1);
@@ -158,6 +187,10 @@ const breaks = [
   ["«пишет…» показан как готовый ответ", 'status = "seen"', 'status = "answered"'],
   ["датчик двойного ответа молчит", 'alerts.push("Лишний ответ на строку " + r.replyTo)', "0"],
   ["в комментарии нет метки строки", "text + tail(id)", "text"],
+  ["режим не влияет на горячее окно", 'mode === "flash" && (state.hotUntil', '(state.hotUntil'],
+  ["строка не несёт метку режима", 'hot ? "db" : "comment", mode, now()', 'hot ? "db" : "comment", undefined, now()'],
+  ["переключатель не сохраняет выбор", "try { await store.saveMode(m); }", "try { }"],
+  ["подсказка о лимите на любую ошибку", 'code(e) === "rate_limited" ? LIMIT', 'true ? LIMIT'],
   ["старые строки без ответа забыты", "wait(r.id, ANSWER_WAIT_MS - (now() - (r.at || 0)), !!r.resentAt);", ""],
 ];
 
