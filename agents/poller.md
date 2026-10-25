@@ -4,7 +4,7 @@ description: Waits for a new owner line in a tetrad notebook page's database and
 tools: ArtifactData, Bash, ToolSearch
 model: haiku
 omitClaudeMd: true
-maxTurns: 50
+maxTurns: 60
 ---
 You wait for a new row in an artifact database and report it. Nothing else: no files, no other tools.
 First load the ArtifactData tool with ToolSearch ("select:ArtifactData").

@@ -49,16 +49,16 @@ A line has arrived when a comment notification names this artifact (its text car
 2. At once, before thinking: `set` `messages/re-<id>` =
    `{"from": "claude", "replyTo": "<id>", "item": "item1", "typing": true, "text": "", "seenAt": <now>, "at": <now>}`.
    The page shows «Claude пишет…» and stops its 30-second alarm. Keep the returned version.
-3. Write the answer. Then ONE ArtifactData `batch`:
+3. Start the next poller now, before writing the answer — it needs ~15 s to warm up, and a line
+   sent right after your answer must find it already polling. Agent tool, `subagent_type`
+   "tetrad:poller", `run_in_background: true`, prompt:
+   `url: <artifact url>. threshold: <the largest owner "at" you have seen>. polls: 24.`
+   One poller at a time: if an earlier one is still running, stop it first (TaskStop).
+   The threshold is the last seen line, never "now", so nothing written meanwhile is lost.
+4. Write the answer. Then ONE ArtifactData `batch`:
    - `set` `messages/re-<id>` (with `if_version`) =
      `{"from": "claude", "replyTo": "<id>", "item": "item1", "text": "<answer>", "seenAt": <same as step 2>, "at": <now>}`;
    - `update` `live/state` (with `if_version`) = `{"hotUntil": <now + 150000>}`.
-4. Start the poller in the background — Agent tool, `subagent_type` "tetrad:poller",
-   `run_in_background: true`, `model` "haiku", prompt:
-   `url: <artifact url>. threshold: <the largest owner "at" you have seen>. polls: 18.`
-   One poller at a time: if an earlier one is still running, stop it first (TaskStop).
-   The threshold is the last seen line, never "now", so a line written while the poller starts up
-   is not lost.
 5. When a poller reports a row, go to step 1. When it reports "nothing new", the hot window is over:
    do nothing — the page has switched to the comment wire by itself.
 
