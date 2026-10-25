@@ -32,19 +32,20 @@ function fakes() {
   const push = () => onRows([...rows.values()].sort((a, b) => a.at - b.at));
   const store = {
     newId: () => "L" + ++seq,
-    addOwner: async (id, text, via, mode, at) => { rows.set(id, { id, from: "owner", text, via, mode, at }); push(); },
+    addOwner: async (id, item, text, via, mode, at) => { rows.set(id, { id, from: "owner", item, text, via, mode, at }); push(); },
     markResent: async (id, at) => { rows.get(id).resentAt = at; push(); },
-    saveThread: async () => {},
+    threadsSaved: [],
+    saveThread: async (item, id) => { store.threadsSaved.push(item + "=" + id); },
     saved: [],
     saveMode: async m => { store.saved.push(m); },
   };
   const sent = [];
   const comments = {
     refuse: null, // set to an error code to make the next sends reject like claude.ai does
-    anchorFor: async () => ({ path: "#item1", x: 0, y: 0 }),
+    anchorFor: async el => ({ path: "#" + el, x: 0, y: 0 }),
     sendToClaude: async target => {
       if (comments.refuse) throw { code: comments.refuse, message: comments.refuse };
-      sent.push(target); return { threadId: "T1", commentId: "C" + sent.length };
+      sent.push(target); return { threadId: target.threadId || "T" + target.anchor.path.slice(1), commentId: "C" + sent.length };
     },
   };
   const claudeRow = (row, extra = {}) => { rows.set(row.id, { from: "claude", at: t, ...row, ...extra }); push(); };
@@ -52,12 +53,15 @@ function fakes() {
 }
 
 const tick = () => new Promise(r => setImmediate(r));
+const note = s => s.view().items[0].note;
 
 async function setup(createWire, hotFor) {
   const f = fakes();
   let last = null;
-  const wire = createWire({ store: f.store, comments: f.comments, anchorEl: {}, clock: f.clock, onChange: v => { last = v; } });
+  const wire = createWire({ store: f.store, comments: f.comments, anchorOf: item => "card-" + item, clock: f.clock,
+    onChange: v => { last = v; } });
   f.setOnRows(wire.setRows);
+  wire.setItems([{ id: "i1", title: "Первый", text: "вступление" }, { id: "i2", title: "Второй", text: "" }]);
   wire.setState({ hotUntil: f.clock.now() + hotFor });
   return { ...f, wire, view: () => last };
 }
@@ -65,47 +69,47 @@ async function setup(createWire, hotFor) {
 const checks = [
   ["горячий разговор: строка уходит только в базу, комментария нет", async W => {
     const s = await setup(W, 60000);
-    await s.wire.send("раз"); await tick();
+    await s.wire.send("i1", "раз"); await tick();
     return s.sent.length === 0 && s.rows.get("L1").via === "db" && s.rows.get("L1").mode === "flash";
   }],
   ["econom: даже в горячем окне строка будит комментарием и несёт метку режима", async W => {
     const s = await setup(W, 60000);
     s.wire.setMode("econom");
-    await s.wire.send("эконом"); await tick();
+    await s.wire.send("i1", "эконом"); await tick();
     return s.sent.length === 1 && s.rows.get("L1").mode === "econom" && s.view().hot === false;
   }],
   ["переключатель режима на странице сохраняет выбор, и следующая строка идёт по нему", async W => {
     const s = await setup(W, 60000);
     await s.wire.chooseMode("econom"); await tick();
-    await s.wire.send("после переключения"); await tick();
+    await s.wire.send("i1", "после переключения"); await tick();
     return s.store.saved.join() === "econom" && s.view().mode === "econom" && s.sent.length === 1;
   }],
   ["лимит комментариев: подсказка появляется только после отказа claude.ai", async W => {
     const s = await setup(W, -1);
-    await s.wire.send("до лимита"); await tick();
-    const before = s.view().note.includes("60 раз в час");
+    await s.wire.send("i1", "до лимита"); await tick();
+    const before = note(s).includes("60 раз в час");
     s.comments.refuse = "upstream_error";
-    await s.wire.send("другая ошибка"); await tick();
-    const other = s.view().note.includes("60 раз в час");
+    await s.wire.send("i1", "другая ошибка"); await tick();
+    const other = note(s).includes("60 раз в час");
     s.comments.refuse = "rate_limited";
-    await s.wire.send("за лимитом"); await tick();
-    return !before && !other && s.view().note.includes("60 раз в час") && s.rows.has("L3");
+    await s.wire.send("i1", "за лимитом"); await tick();
+    return !before && !other && note(s).includes("60 раз в час") && s.rows.has("L3");
   }],
   ["остывший разговор: строка уходит в базу и одним комментарием с меткой строки", async W => {
     const s = await setup(W, -1);
-    await s.wire.send("два"); await tick();
+    await s.wire.send("i1", "два"); await tick();
     return s.sent.length === 1 && s.sent[0].text.startsWith("два") && s.sent[0].text.includes("[tetrad L1]")
       && s.rows.get("L1").via === "comment";
   }],
   ["горячее окно кончилось по часам: следующая строка уже будит комментарием", async W => {
     const s = await setup(W, 10000);
     s.advance(11000);
-    await s.wire.send("три"); await tick();
+    await s.wire.send("i1", "три"); await tick();
     return s.sent.length === 1 && s.view().hot === false;
   }],
   ["нет ответа 30 с: появляется кнопка «разбудить», но сама страница ничего не шлёт", async W => {
     const s = await setup(W, 60000);
-    await s.wire.send("четыре"); await tick();
+    await s.wire.send("i1", "четыре"); await tick();
     s.advance(29000);
     const before = s.view().lines[0].status;
     s.advance(2000); await tick();
@@ -113,7 +117,7 @@ const checks = [
   }],
   ["кнопка «разбудить» шлёт ровно один повтор, второй раз — ничего", async W => {
     const s = await setup(W, 60000);
-    await s.wire.send("пять"); await tick();
+    await s.wire.send("i1", "пять"); await tick();
     s.advance(31000);
     const first = await s.wire.resend("L1"); await tick();
     const second = await s.wire.resend("L1"); await tick();
@@ -122,7 +126,7 @@ const checks = [
   }],
   ["ответ пришёл за 20 с: кнопки нет и потом не появится", async W => {
     const s = await setup(W, 60000);
-    await s.wire.send("шесть"); await tick();
+    await s.wire.send("i1", "шесть"); await tick();
     s.advance(20000);
     s.claudeRow({ id: "re-L1", replyTo: "L1", text: "ответ", seenAt: s.clock.now() - 5000 });
     s.advance(40000); await tick();
@@ -132,7 +136,7 @@ const checks = [
   }],
   ["«Claude пишет…» тоже снимает кнопку: сессия строку увидела", async W => {
     const s = await setup(W, 60000);
-    await s.wire.send("семь"); await tick();
+    await s.wire.send("i1", "семь"); await tick();
     s.advance(10000);
     s.claudeRow({ id: "re-L1", replyTo: "L1", typing: true, text: "", seenAt: s.clock.now() });
     s.advance(40000); await tick();
@@ -140,7 +144,7 @@ const checks = [
   }],
   ["датчик «один ответ на строку»: ответ не на своём месте поднимает тревогу", async W => {
     const s = await setup(W, 60000);
-    await s.wire.send("восемь"); await tick();
+    await s.wire.send("i1", "восемь"); await tick();
     s.claudeRow({ id: "re-L1", replyTo: "L1", text: "ответ" });
     const clean = s.view().alerts.length === 0;
     s.claudeRow({ id: "extra", replyTo: "L1", text: "ещё ответ" });
@@ -148,8 +152,8 @@ const checks = [
   }],
   ["ответ на одну строку не гасит соседнюю", async W => {
     const s = await setup(W, 60000);
-    await s.wire.send("первая"); await tick();
-    await s.wire.send("вторая"); await tick();
+    await s.wire.send("i1", "первая"); await tick();
+    await s.wire.send("i1", "вторая"); await tick();
     s.claudeRow({ id: "re-L1", replyTo: "L1", text: "ответ на первую" });
     s.advance(31000); await tick();
     const line = id => s.view().lines.find(l => l.id === id);
@@ -157,10 +161,40 @@ const checks = [
   }],
   ["строка без ответа с прошлого визита сразу получает кнопку", async W => {
     const s = await setup(W, -1);
-    s.rows.set("OLD", { id: "OLD", from: "owner", text: "давно", via: "comment", at: s.clock.now() - 120000 });
+    s.rows.set("OLD", { id: "OLD", from: "owner", item: "i1", text: "давно", via: "comment", at: s.clock.now() - 120000 });
     s.wire.setRows([...s.rows.values()]);
     s.advance(1); await tick();
     return s.view().lines[0].status === "overdue";
+  }],
+  ["пункты: у каждого своя лента, строка попадает только в свой пункт", async W => {
+    const s = await setup(W, 60000);
+    await s.wire.send("i2", "во второй"); await tick();
+    s.claudeRow({ id: "re-L1", replyTo: "L1", text: "ответ во втором" });
+    const [a, b] = s.view().items;
+    return s.rows.get("L1").item === "i2" && a.lines.length === 0 && b.lines.length === 2
+      && a.opening === "вступление" && b.note !== "" && a.note === "";
+  }],
+  ["у каждого пункта своя ветка комментариев, и она переиспользуется", async W => {
+    const s = await setup(W, -1);
+    await s.wire.send("i2", "раз во втором"); await tick();
+    await s.wire.send("i2", "два во втором"); await tick();
+    await s.wire.send("i1", "в первом"); await tick();
+    return s.sent.length === 3 && s.sent[0].anchor.path === "#card-i2" && s.sent[1].threadId === "Tcard-i2"
+      && s.sent[2].anchor.path === "#card-i1" && s.store.threadsSaved.join() === "i2=Tcard-i2,i1=Tcard-i1";
+  }],
+  ["ветка с прошлого визита: пункт пишет в неё, а не открывает новую", async W => {
+    const s = await setup(W, -1);
+    s.wire.setThreads({ i1: "OLDT" });
+    await s.wire.send("i1", "снова"); await tick();
+    return s.sent.length === 1 && s.sent[0].threadId === "OLDT" && s.store.threadsSaved.length === 0;
+  }],
+  ["датчик «строка в своём пункте»: строка без пункта поднимает тревогу", async W => {
+    const s = await setup(W, 60000);
+    await s.wire.send("i1", "своя"); await tick();
+    const clean = s.view().alerts.length === 0;
+    s.rows.set("X", { id: "X", from: "owner", item: "i9", text: "чужая", at: s.clock.now() });
+    s.wire.setRows([...s.rows.values()]);
+    return clean && s.view().alerts.some(a => a.includes("X"));
   }],
 ];
 
@@ -191,6 +225,11 @@ const breaks = [
   ["строка не несёт метку режима", 'hot ? "db" : "comment", mode, now()', 'hot ? "db" : "comment", undefined, now()'],
   ["переключатель не сохраняет выбор", "try { await store.saveMode(m); }", "try { }"],
   ["подсказка о лимите на любую ошибку", 'code(e) === "rate_limited" ? LIMIT', 'true ? LIMIT'],
+  ["строка уходит не в свой пункт", "await store.addOwner(id, item, text", 'await store.addOwner(id, "i1", text'],
+  ["все пункты пишут в одну ветку", "const t = threads[item];", "const t = Object.values(threads)[0];"],
+  ["ветка с прошлого визита забыта", "for (const k in map) threads[k] = threads[k] || map[k];", ""],
+  ["датчик строки вне пунктов молчит", 'alerts.push("Строка вне пунктов: " + l.id)', "0"],
+  ["лента пункта показывает все строки", "lines: lines.filter(l => l.item === i.id)", "lines"],
   ["старые строки без ответа забыты", "wait(r.id, ANSWER_WAIT_MS - (now() - (r.at || 0)), !!r.resentAt);", ""],
 ];
 

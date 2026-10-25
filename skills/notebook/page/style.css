@@ -1,4 +1,4 @@
-/* One paper sheet, one item card — the tetrad look from the probe pages. */
+/* One paper sheet, one card per item — the tetrad look from the probe pages. */
 :root {
   --ground: #cdc3ae; --paper: #fdfbf4; --card: #ffffff; --ink: #2c2a26;
   --muted: #7d776d; --line: #e4ddcc; --accent: #b4762a; --alert: #c0392b; --ok: #3f7a4a;
@@ -29,6 +29,7 @@ h1 { font-size: 20px; margin: 0; text-wrap: balance; }
 .modes button b { color: var(--accent); }
 .modes button span { font-size: 12px; color: var(--muted); }
 .modes button[aria-checked="true"] { border: 2px solid var(--accent); background: var(--mine); }
+.items { display: flex; flex-direction: column; gap: 14px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
   display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .card h2 { font-size: 16px; margin: 0; }

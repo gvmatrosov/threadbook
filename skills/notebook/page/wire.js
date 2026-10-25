@@ -4,6 +4,8 @@
 //          cold: no poller at all. Each line carries the mode, so the session knows whether to start one.
 // No answer (not even «Claude пишет…») within ANSWER_WAIT_MS → the line offers a one-tap re-send,
 // once. It is a tap, not a timer: the platform takes sendToClaude only from the viewer's own gesture.
+// The sheet holds several items (cards); each owner line belongs to one, and each card keeps its own
+// comment thread. The hot window and the mode are per sheet.
 // No DOM here, so tools/test-page.js drives it with a fake store, fake comments and a fake clock.
 
 export const ANSWER_WAIT_MS = 30000;
@@ -21,14 +23,17 @@ const LIMIT = "claude.ai даёт будить сессию комментари
   "Строка записана, сессия прочтёт её при следующем пробуждении. В полной версии тетради такого лимита нет.";
 const failNote = (what, e) => (code(e) === "rate_limited" ? LIMIT : what + " (" + code(e) + ").");
 
-export function createWire({ store, comments, anchorEl, clock, onChange }) {
+export function createWire({ store, comments, anchorOf, clock, onChange }) {
   const { now, later, cancel } = clock;
-  let rows = [], state = {}, mode = "flash", threadId = null, canSend = "…", note = "", hotTimer = null;
+  let rows = [], items = [], state = {}, mode = "flash", canSend = "…", hotTimer = null;
+  let note = { item: null, text: "" };
+  const threads = {}; // item → comment thread id
   const waits = new Map(); // owner row id → {timer, overdue, resent, silent}
 
   const replyOf = id => rows.find(r => r.from === "claude" && r.replyTo === id);
   const isHot = () => mode === "flash" && (state.hotUntil || 0) > now();
   const changed = () => onChange(view());
+  const say = (item, text) => { note = { item, text }; };
 
   function wait(id, ms, resent = false) {
     const w = { timer: null, overdue: false, resent, silent: false };
@@ -43,24 +48,25 @@ export function createWire({ store, comments, anchorEl, clock, onChange }) {
     changed();
   }
 
-  async function comment(text) {
-    const target = threadId ? { threadId, text } : { anchor: await comments.anchorFor(anchorEl), text };
+  async function comment(item, text) {
+    const t = threads[item];
+    const target = t ? { threadId: t, text } : { anchor: await comments.anchorFor(anchorOf(item)), text };
     const res = await comments.sendToClaude(target);
-    if (!threadId) { threadId = res.threadId; store.saveThread(threadId).catch(() => {}); }
+    if (!t) { threads[item] = res.threadId; store.saveThread(item, res.threadId).catch(() => {}); }
   }
 
   // Call straight from the tap handler: the comment is started before anything is awaited.
-  async function send(text) {
+  async function send(item, text) {
     const id = store.newId(), hot = isHot();
-    const wake = hot || !comments ? null : comment(text + tail(id));
+    const wake = hot || !comments ? null : comment(item, text + tail(id));
     if (!waits.has(id)) wait(id, ANSWER_WAIT_MS);
-    note = hot ? "Ушло в тетрадь — сессия на связи." : "Ушло и будит сессию, это около 30 секунд.";
+    say(item, hot ? "Ушло в тетрадь — сессия на связи." : "Ушло и будит сессию, это около 30 секунд.");
     changed();
     try {
-      await store.addOwner(id, text, hot ? "db" : "comment", mode, now());
+      await store.addOwner(id, item, text, hot ? "db" : "comment", mode, now());
     } catch (e) {
       cancel(waits.get(id).timer); waits.delete(id);
-      note = "Строка не записалась (" + code(e) + "), текст оставлен в поле.";
+      say(item, "Строка не записалась (" + code(e) + "), текст оставлен в поле.");
       changed();
       return false;
     }
@@ -68,7 +74,7 @@ export function createWire({ store, comments, anchorEl, clock, onChange }) {
       try { await wake; } catch (e) {
         const w = waits.get(id);
         if (w && !replyOf(id)) w.overdue = true;
-        note = failNote("Разбудить сессию не удалось, строка в тетради", e);
+        say(item, failNote("Разбудить сессию не удалось, строка в тетради", e));
       }
     }
     changed();
@@ -80,14 +86,14 @@ export function createWire({ store, comments, anchorEl, clock, onChange }) {
     if (!w || w.resent || !row || !comments || replyOf(id)) return false;
     cancel(w.timer);
     wait(id, ANSWER_WAIT_MS, true);
-    const p = comment(row.text + tail(id));
-    note = "Бужу сессию ещё раз.";
+    const p = comment(row.item, row.text + tail(id));
+    say(row.item, "Бужу сессию ещё раз.");
     changed();
     try {
       await p;
       await store.markResent(id, now()).catch(() => {});
     } catch (e) {
-      note = failNote("Разбудить не удалось, загляни в терминал", e);
+      say(row.item, failNote("Разбудить не удалось, загляни в терминал", e));
     }
     changed();
     return true;
@@ -124,33 +130,42 @@ export function createWire({ store, comments, anchorEl, clock, onChange }) {
     setMode(m);
     try { await store.saveMode(m); } catch (e) {
       mode = was;
-      note = "Режим не переключился (" + code(e) + ").";
+      say(null, "Режим не переключился (" + code(e) + ").");
       changed();
     }
   }
 
-  function setThread(id) { threadId = threadId || id; }
+  function setItems(next) { items = next; changed(); }
+  function setThreads(map) { for (const k in map) threads[k] = threads[k] || map[k]; }
   function setCanSend(v) { canSend = v; changed(); }
 
   function view() {
     const alerts = [];
+    const known = new Set(items.map(i => i.id));
     const lines = rows.map(r => {
       if (r.from === "claude") {
         // Датчик «один ответ на строку»: an answer must live at re-<line id>, or two can pile up.
         if (r.replyTo && r.id !== "re-" + r.replyTo) alerts.push("Лишний ответ на строку " + r.replyTo);
-        return { id: r.id, from: "claude", text: r.text || "", typing: !!r.typing };
+        const q = r.replyTo && rows.find(o => o.id === r.replyTo);
+        return { id: r.id, from: "claude", item: q ? q.item : r.item, text: r.text || "", typing: !!r.typing };
       }
       const reply = replyOf(r.id), w = waits.get(r.id);
       let status = "answered";
       if (reply && reply.typing) status = "seen";
       else if (!reply) status = !w ? "waiting" : w.silent ? "silent" : w.overdue ? "overdue" : w.resent ? "resent" : "waiting";
       const secs = t => (t && r.at ? Math.round((t - r.at) / 1000) : null);
-      return { id: r.id, from: "owner", text: r.text || "", via: r.via, status,
+      return { id: r.id, from: "owner", item: r.item, text: r.text || "", via: r.via, status,
         seenIn: reply ? secs(reply.seenAt) : null, answeredIn: reply && !reply.typing ? secs(reply.at) : null };
     });
-    return { title: state.title || "Тетрадь", itemTitle: state.itemTitle || "Пункт 1",
-      mode, hot: isHot(), canSend, note, lines, alerts };
+    // Датчик «строка в своём пункте»: a line whose card is missing would be invisible on the page.
+    if (items.length) {
+      for (const l of lines) if (!known.has(l.item)) alerts.push("Строка вне пунктов: " + l.id);
+    }
+    const cards = items.map(i => ({ id: i.id, title: i.title || "Пункт", opening: i.text || "",
+      lines: lines.filter(l => l.item === i.id), note: note.item === i.id ? note.text : "" }));
+    return { title: state.title || "Тетрадь", mode, hot: isHot(), canSend,
+      note: note.item === null ? note.text : "", items: cards, lines, alerts };
   }
 
-  return { send, resend, setRows, setState, setMode, chooseMode, setThread, setCanSend, view };
+  return { send, resend, setRows, setItems, setState, setMode, chooseMode, setThreads, setCanSend, view };
 }

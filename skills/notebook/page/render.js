@@ -1,5 +1,6 @@
 // Draws the wire's view. Built from elements with textContent (line text is never parsed as HTML),
-// and the scroll position is kept across re-renders so the page does not jump.
+// and the scroll position is kept across re-renders so the page does not jump. Each item card is
+// built once and then only its log is redrawn, so a half-typed line and its focus survive an answer.
 
 const $ = id => document.getElementById(id);
 
@@ -17,6 +18,7 @@ const STATUS = {
   silent: "сессия молчит — загляни в терминал",
 };
 const VIA = { db: "через тетрадь", comment: "через комментарий" };
+const cards = new Map(); // item id → {section, title, log, note}
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -43,11 +45,33 @@ function claudeLine(l) {
   return box;
 }
 
+// The card's section is also the comment anchor for its thread.
+export const sectionOf = item => cards.get(item)?.section;
+
+function card(item) {
+  if (cards.has(item)) return cards.get(item);
+  const section = el("section", "card");
+  const title = el("h2"), log = el("div", "log"), note = el("span", "note");
+  const form = el("form", "compose");
+  form.dataset.item = item;
+  const text = el("textarea");
+  text.maxLength = 1800;
+  text.placeholder = "Ответ по этому пункту";
+  const send = el("button", "", "Отправить");
+  send.type = "submit";
+  const row = el("div", "row");
+  row.append(send, note);
+  form.append(text, row);
+  section.append(title, log, form);
+  const c = { section, title, log, note };
+  cards.set(item, c);
+  return c;
+}
+
 export function render(v) {
   const y = window.scrollY;
   document.title = v.title;
   $("title").textContent = v.title;
-  $("item-title").textContent = v.itemTitle;
 
   for (const b of $("modes").querySelectorAll("[data-mode]")) {
     b.setAttribute("aria-checked", String(b.dataset.mode === v.mode));
@@ -62,10 +86,23 @@ export function render(v) {
     el("b", cls, words),
   );
 
-  const log = $("log");
-  log.replaceChildren(...(v.lines.length
-    ? v.lines.map(l => (l.from === "claude" ? claudeLine(l) : ownerLine(l)))
-    : [el("div", "empty", "Здесь появятся твои строки и ответы Claude.")]));
+  const box = $("items");
+  if (!v.items.length) box.replaceChildren(el("div", "empty", "Пунктов пока нет — сессия их ещё раскладывает."));
+  else {
+    const keep = new Set(v.items.map(i => i.id));
+    for (const [id, c] of cards) if (!keep.has(id)) { c.section.remove(); cards.delete(id); }
+    const sections = v.items.map(i => {
+      const c = card(i.id);
+      c.title.textContent = i.title;
+      const opening = i.opening ? [claudeLine({ text: i.opening })] : [];
+      c.log.replaceChildren(...opening, ...i.lines.map(l => (l.from === "claude" ? claudeLine(l) : ownerLine(l))));
+      c.note.textContent = i.note;
+      return c.section;
+    });
+    // Reorder only when needed: moving a section blurs a textarea inside it.
+    const now = [...box.children];
+    if (now.length !== sections.length || sections.some((s, k) => now[k] !== s)) box.replaceChildren(...sections);
+  }
 
   // The wake button lives in a bar pinned to the bottom of the screen, so a long log can never
   // scroll it out of sight. It names the oldest line still waiting past 30 s.
@@ -79,12 +116,11 @@ export function render(v) {
     $("wake").disabled = false;
   }
 
-  $("alerts").replaceChildren(...v.alerts.map(a => el("div", "alert", a)));
-  $("note").textContent = v.note;
+  $("alerts").replaceChildren(...v.alerts.map(a => el("div", "alert", a)), ...(v.note ? [el("div", "note", v.note)] : []));
   window.scrollTo(0, y);
 }
 
 export function renderAbsent(text) {
   $("state").textContent = text;
-  $("send").disabled = true;
+  for (const b of document.querySelectorAll("form button")) b.disabled = true;
 }
