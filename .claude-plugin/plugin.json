@@ -1,0 +1,11 @@
+{
+  "name": "tetrad",
+  "version": "0.1.0",
+  "description": "A notebook page for a live Claude Code session: say «разложи в тетрадь», open the page on any device, write into it, and this same session answers there — fast while the conversation is hot, by a wake-up comment when it has gone quiet.",
+  "author": {
+    "name": "gvmatrosov",
+    "url": "https://github.com/gvmatrosov"
+  },
+  "license": "MIT",
+  "keywords": ["notebook", "artifact", "mobile", "remote", "session"]
+}

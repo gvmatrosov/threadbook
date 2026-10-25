@@ -1,0 +1,22 @@
+<title>Тетрадь</title>
+<link rel="stylesheet" href="style.css">
+
+<div class="sheet">
+  <h1 id="title">Тетрадь</h1>
+  <div class="state" id="state">Подключаюсь…</div>
+  <div id="alerts"></div>
+
+  <section class="card" id="item1">
+    <h2 id="item-title">Пункт 1</h2>
+    <div class="log" id="log"><div class="empty">Здесь появятся твои строки и ответы Claude.</div></div>
+    <form class="compose" id="form">
+      <textarea id="text" maxlength="1800" placeholder="Напиши строку для Claude"></textarea>
+      <div class="row">
+        <button id="send" type="submit" disabled>Отправить</button>
+        <span class="note" id="note"></span>
+      </div>
+    </form>
+  </section>
+</div>
+
+<script type="module" src="app.js"></script>

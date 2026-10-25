@@ -1,0 +1,48 @@
+/* One paper sheet, one item card — the tetrad look from the probe pages. */
+:root {
+  --ground: #cdc3ae; --paper: #fdfbf4; --card: #ffffff; --ink: #2c2a26;
+  --muted: #7d776d; --line: #e4ddcc; --accent: #b4762a; --alert: #c0392b; --ok: #3f7a4a;
+  --mine: #f6efe0;
+  --body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --ground: #1d1b18; --paper: #26231f; --card: #2e2a25; --ink: #ece6da;
+  --muted: #a39b8e; --line: #423c34; --accent: #d9a05a; --alert: #e0705f; --ok: #7fbf8a;
+  --mine: #3a332a; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --ground: #1d1b18; --paper: #26231f; --card: #2e2a25; --ink: #ece6da;
+  --muted: #a39b8e; --line: #423c34; --accent: #d9a05a; --alert: #e0705f; --ok: #7fbf8a;
+  --mine: #3a332a; color-scheme: dark }
+* { box-sizing: border-box; }
+body { background: var(--ground); color: var(--ink); font: 16px/1.5 var(--body); margin: 0;
+  padding-inline: 16px; padding-block: 16px 40px; }
+.sheet { max-width: 720px; margin: 0 auto; background: var(--paper); border: 1px solid var(--line);
+  border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+h1 { font-size: 20px; margin: 0; text-wrap: balance; }
+.state { font-size: 13px; color: var(--muted); }
+.state b { font-weight: 600; }
+.bad { color: var(--alert); } .good { color: var(--ok); }
+.alert { font-size: 13px; color: var(--alert); border: 1px solid var(--alert); border-radius: 8px; padding: 6px 10px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.card h2 { font-size: 16px; margin: 0; }
+.log { display: flex; flex-direction: column; gap: 8px; }
+.msg { border-radius: 8px; padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere;
+  display: flex; flex-direction: column; gap: 4px; }
+.msg.owner { background: var(--mine); align-self: flex-end; max-width: 90%; }
+.msg.claude { border: 1px solid var(--line); }
+.msg .who { font-size: 12px; color: var(--muted); }
+.status { font-size: 12px; color: var(--muted); }
+.status.silent { color: var(--alert); }
+.empty { color: var(--muted); font-size: 14px; }
+.compose { display: flex; flex-direction: column; gap: 8px; }
+textarea { font: inherit; color: var(--ink); background: var(--paper); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 10px; min-height: 64px; resize: vertical; width: 100%; }
+textarea:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+button { font: inherit; font-weight: 600; background: var(--accent); color: var(--paper); border: 0;
+  border-radius: 8px; padding: 8px 18px; cursor: pointer; }
+button:disabled { opacity: .5; cursor: default; }
+button.alt { background: var(--card); color: var(--accent); border: 1px solid var(--accent); }
+button.wake { align-self: flex-start; font-size: 14px; padding: 6px 12px; white-space: normal; }
+.note { font-size: 13px; color: var(--muted); }
