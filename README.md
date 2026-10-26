@@ -87,19 +87,13 @@ line). claude.ai allows 60 comment wake-ups per page per hour; hot lines spend n
   Artifact's database for new lines and runs `sleep 4` between reads — nothing else.
 - **`threadbook-now`** (in `bin/`) prints the current time in milliseconds; the session uses it
   to stamp rows.
-- **`tools/`** holds the developer tests (Node, Playwright); nothing there runs when you use the
-  plugin.
 
 Nothing is sent anywhere but claude.ai. The plugin reads no credentials, keeps no data of its
 own and has no telemetry; the notebook's content lives in your private Artifact until you delete it.
 
 ## Development
 
-Plain ES modules, no build step. Guards:
-
-- `node tools/test-page.js` — the delivery logic against a fake db, comments and clock;
-  `--porcha` breaks the code line by line and requires every break to turn a check red;
-- `node tools/test-dom.js [--shots <dir>]` — the page in headless Chromium (needs Playwright).
+Plain ES modules and Markdown, no build step: what is in the repository is what runs.
 
 ## License
 

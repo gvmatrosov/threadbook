@@ -1,6 +1,6 @@
 {
   "name": "threadbook",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Break long Claude Code answers into points you can discuss in any order — in the same session, from any device.",
   "author": {
     "name": "gvmatrosov",
