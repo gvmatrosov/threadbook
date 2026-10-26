@@ -70,14 +70,15 @@ it). The one question is in step 1, and only for more than 15 items.
 7. The publish result must say the watch is connected with auto-replies armed. If it does not, run
    ArtifactComments `watch` with the url and check the listing (`watch` without url).
 
-Get epoch milliseconds with `date +%s%3N`; never guess a time.
+Get epoch milliseconds with `threadbook-now` (this plugin's own command, on the Bash PATH; it
+works on Linux and macOS alike, where `date +%s%3N` does not); never guess a time.
 
 ## 2. When a line arrives
 
 A line has arrived when a comment notification names this artifact (its text carries
 `[threadbook <id>]`), when a poller hands back a row, or when the person says so in the terminal.
 
-1. ArtifactData `list` on `messages`, and `date +%s%3N` in the same message (parallel calls — every
+1. ArtifactData `list` on `messages`, and `threadbook-now` in the same message (parallel calls — every
    second before step 2 is a second the person watches nothing happen). Owner rows are `from: "owner"`; a line is answered when a doc
    `re-<its id>` exists. Answer every unanswered owner line, oldest first. Its `item` names the card
    it was written in: answer about that item's point. A card you do not know was added by the person

@@ -11,6 +11,20 @@ const path = require("path");
 const { pathToFileURL } = require("url");
 
 const PAGE = path.join(__dirname, "../skills/notebook/page");
+const NOW = path.join(__dirname, "../bin/threadbook-now");
+const { execFileSync } = require("child_process");
+// Runs bin/threadbook-now with a PATH of fakes: a `date` that answers like macOS's (no %3N), and
+// optionally no perl or python3 at all.
+function nowWith({ macDate, bare }) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "threadbook-now-"));
+  if (macDate) {
+    fs.writeFileSync(path.join(dir, "date"), '#!/bin/sh\ns=$(/bin/date +%s)\ncase "$1" in *%3N*) echo "${s}3N";; *) echo "$s";; esac\n', { mode: 0o755 });
+  }
+  const PATH = bare ? dir : dir + ":" + process.env.PATH;
+  try { return execFileSync("/bin/sh", [NOW], { env: { PATH }, encoding: "utf8" }).trim(); }
+  finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+const closeToNow = (out, slack) => /^\d+$/.test(out) && Math.abs(Number(out) - Date.now()) < slack;
 const MODULES = ["wire.js", "actions.js", "local.js", "i18n.js"];
 
 function fakes() {
@@ -350,6 +364,16 @@ const checks = [
     && I.browserLang({ language: "ru-RU" }) === "ru" && I.browserLang({ language: "en-US" }) === "en"
     && I.browserLang(undefined) === "en"],
   ["датчик словаря: у английского и русского одни и те же слова", async (W, A, L, I) => I.missingKeys().length === 0],
+  ["threadbook-now: миллисекунды на Linux", async () => closeToNow(nowWith({}), 3000)],
+  // Real milliseconds, not seconds × 1000: three runs all landing on a whole second is ~1 in 10⁹.
+  ["threadbook-now: на Mac (date без %3N) — настоящие миллисекунды, а не «…3N»", async () => {
+    const outs = [1, 2, 3].map(() => nowWith({ macDate: true }));
+    return outs.every(o => closeToNow(o, 3000)) && outs.some(o => Number(o) % 1000 !== 0);
+  }],
+  ["threadbook-now: без perl и python — секунды × 1000, но число", async () => {
+    const out = nowWith({ macDate: true, bare: true });
+    return closeToNow(out, 3000) && Number(out) % 1000 === 0;
+  }],
   // The gallery names an artifact by the page's own <title> when it has one, ignoring the title the
   // session passes at publish — so the page must carry none (the tab title is set by render.js).
   ["в странице нет своего <title>: тетрадь в галерее зовётся по имени листа", async () =>

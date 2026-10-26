@@ -21,8 +21,11 @@ or add the catalog once and install from it:
 /plugin install threadbook@tashi-solo
 ```
 
-It needs Claude Code signed in to a claude.ai account with Artifacts available. The page is a
-private claude.ai Artifact: it works opened at claude.ai (phone browser included), not elsewhere.
+**Claude Code only.** The notebook is answered by a session running in your terminal, so the
+plugin is for Claude Code; it ships a small command (`bin/`), which keeps claude.ai chat and Cowork
+from installing it. It needs Claude Code signed in to a claude.ai account with Artifacts available.
+The page is a private claude.ai Artifact: it works opened at claude.ai (phone browser included),
+not elsewhere.
 
 ## Use
 
@@ -68,10 +71,25 @@ line). claude.ai allows 60 comment wake-ups per page per hour; hot lines spend n
 - If the comment watch ends after hours of silence, the page says "session not listening"; tell
   the session "notebook, wake up" in the terminal.
 
-## What it touches
+## What it runs and sends
 
-Nothing on your machine but Claude's own tools. The page and its data (items, lines, answers)
-live in that private Artifact on claude.ai; the page talks to nothing else. No telemetry.
+- **The notebook skill** tells your session to: copy the page files into its scratchpad folder,
+  publish them as a private Artifact on claude.ai, write the items and its answers into that
+  Artifact's database, and watch the Artifact's comments. It edits none of your files.
+- **The page** runs in your browser at claude.ai and talks only to claude.ai: it saves your lines
+  in the Artifact's database and, when the session needs waking, sends the line as a comment to
+  Claude. That comment ends with a short note asking claude.ai's automatic comment reply to answer
+  with one word ("received"), because the real answer comes from your session into the page.
+  Drafts and which items are open stay in your browser's local storage.
+- **The background agent** (`threadbook:poller`, flash mode only) runs on Haiku, reads the
+  Artifact's database for new lines and runs `sleep 4` between reads — nothing else.
+- **`threadbook-now`** (in `bin/`) prints the current time in milliseconds; the session uses it
+  to stamp rows.
+- **`tools/`** holds the developer tests (Node, Playwright); nothing there runs when you use the
+  plugin.
+
+Nothing is sent anywhere but claude.ai. The plugin reads no credentials, keeps no data of its
+own and has no telemetry; the notebook's content lives in your private Artifact until you delete it.
 
 ## Development
 

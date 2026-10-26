@@ -1,0 +1,15 @@
+#!/bin/sh
+# Prints the current time in epoch milliseconds — the clock every notebook row carries.
+# GNU date does it alone; macOS's date prints "…3N" for %3N, so perl or python3 step in there.
+ms=$(date +%s%3N 2>/dev/null)
+case $ms in
+  '' | *[!0-9]*) ;;
+  *) echo "$ms"; exit 0 ;;
+esac
+if command -v perl >/dev/null 2>&1; then
+  exec perl -MTime::HiRes=time -e 'printf "%d\n", time() * 1000'
+fi
+if command -v python3 >/dev/null 2>&1; then
+  exec python3 -c 'import time; print(int(time.time() * 1000))'
+fi
+echo "$(($(date +%s) * 1000))"
