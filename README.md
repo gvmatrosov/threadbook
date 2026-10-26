@@ -1,8 +1,10 @@
 # Threadbook
 
-Keep talking to your live Claude Code session from your phone — in a notebook page with one thread
-per point. Break your session into points, walk away from the terminal, and answer point by point
-from any device; the same session, with its full memory, replies right under each one.
+Break long Claude Code answers into points you can discuss in any order — in the same session, from any device.
+
+Claude lays the answer out as an interactive artifact — a private notebook page with one thread
+per point. Walk away from the terminal, open the page on your phone, and write under whichever
+point you like; the same session, with its full memory, replies right under it.
 
 <img src="assets/phone.png" alt="A Threadbook page on a phone: numbered items, each with its own thread and answer field" width="320">
 

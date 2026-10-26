@@ -1,9 +1,16 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "threadbook",
-  "description": "Keep talking to your live Claude Code session from your phone, one thread per point.",
-  "owner": { "name": "gvmatrosov", "url": "https://github.com/gvmatrosov" },
+  "description": "Break long Claude Code answers into points you can discuss in any order — in the same session, from any device.",
+  "owner": {
+    "name": "gvmatrosov",
+    "url": "https://github.com/gvmatrosov"
+  },
   "plugins": [
-    { "name": "threadbook", "source": "./", "category": "productivity" }
+    {
+      "name": "threadbook",
+      "source": "./",
+      "category": "productivity"
+    }
   ]
 }

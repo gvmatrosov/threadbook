@@ -1,7 +1,7 @@
 {
   "name": "threadbook",
-  "version": "0.1.4",
-  "description": "Keep talking to your live Claude Code session from your phone: say “put this in a notebook” and the session lays the conversation out as a private claude.ai page, one thread per point — write under any point from any device and the same session, with its full memory, answers there.",
+  "version": "0.1.5",
+  "description": "Break long Claude Code answers into points you can discuss in any order — in the same session, from any device.",
   "author": {
     "name": "gvmatrosov",
     "url": "https://github.com/gvmatrosov"
