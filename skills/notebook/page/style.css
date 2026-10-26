@@ -62,9 +62,17 @@ h1 { font-size: 21px; margin: 0; text-wrap: balance; }
 .dot { flex: 0 0 auto; width: 9px; height: 9px; background: var(--alert); border-radius: 50%; animation: blink 1.4s ease-in-out infinite; }
 .spin { flex: 0 0 auto; width: 16px; height: 16px; border: 2.5px solid var(--line); border-top-color: var(--accent);
   border-radius: 50%; animation: spin .9s linear infinite; }
+/* The open/close sign, drawn with two bars so it does not depend on the font. */
+.pm { flex: 0 0 auto; position: relative; width: 26px; height: 26px; border: 1.5px solid var(--muted); border-radius: 50%; }
+.pm::before, .pm::after { content: ""; position: absolute; left: 50%; top: 50%; width: 12px; height: 2px;
+  margin: -1px 0 0 -6px; background: var(--muted); border-radius: 1px; transition: transform .15s; }
+.pm::after { transform: rotate(90deg); }
+.card.open .pm { border-color: var(--accent); }
+.card.open .pm::before, .card.open .pm::after { background: var(--accent); }
+.card.open .pm::after { transform: rotate(0deg); }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes blink { 0%, 100% { opacity: 1 } 50% { opacity: .35 } }
-@media (prefers-reduced-motion: reduce) { .spin, .dot { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .spin, .dot { animation: none; } .pm::after { transition: none; } }
 .body { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 12px; }
 
 .lengths { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: 13px; }
@@ -110,6 +118,9 @@ button.quiet { background: transparent; color: var(--muted); border: 1px solid v
 .linkbtn:hover { color: var(--accent); }
 .linkbtn.danger:hover { color: var(--alert); }
 .tools { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.tools .linkbtn { border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; }
+.tools .linkbtn:hover { border-color: var(--accent); }
+.tools .linkbtn.danger:hover { border-color: var(--alert); }
 .inline { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .inline input { flex: 1 1 200px; width: auto; }
 form.card.inline { padding: 12px 14px; }

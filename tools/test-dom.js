@@ -73,11 +73,21 @@ const check = (name, ok) => { results.push([name, ok]); console.log((ok ? "  з�
   check("старый ответ при первом входе не горит красной точкой",
     await page.$eval(card(2) + " .dot", d => d.hidden));
 
+  // The sign is a plus while closed: its vertical bar (::after) stands at 90°, and lies flat once open.
+  const bar = n => page.$eval(card(n) + " .pm", p => getComputedStyle(p, "::after").transform);
+  const closedBar = await bar(1);
   await page.click(card(1) + " .head");
+  await page.waitForTimeout(250);
+  check("знак в кружке: плюс у закрытого пункта, минус у открытого",
+    closedBar !== "none" && closedBar !== "matrix(1, 0, 0, 1, 0, 0)" && (await bar(1)) === "matrix(1, 0, 0, 1, 0, 0)"
+    && (await bar(2)) === closedBar);
   check("тап по заголовку открывает пункт: вступление нарисовано списком, жирный — жирным",
     await page.$eval(card(1), c => !c.querySelector(".body").hidden && c.querySelectorAll(".md li").length === 3
       && c.querySelector(".md b")?.textContent === "не читая"));
   await shot(page, "2-phone-open");
+
+  check("у кнопок внизу пункта есть рамка",
+    await page.$$eval(card(1) + " .tools button", bs => bs.length === 3 && bs.every(b => parseFloat(getComputedStyle(b).borderTopWidth) > 0)));
 
   check("рамка одна: у листа и у сообщений рамок нет",
     await page.evaluate(() => {

@@ -83,7 +83,9 @@ function build(id, draft) {
   c.draftmark.title = "есть неотправленный черновик";
   c.dot = el("span", "dot");
   c.dot.title = "новый ответ";
-  c.head.append(c.num, c.title, c.badge, c.spin, c.draftmark, c.dot);
+  c.pm = el("span", "pm"); // the open/close sign: a plus in a circle, a minus once open
+  c.pm.setAttribute("aria-hidden", "true");
+  c.head.append(c.num, c.title, c.badge, c.spin, c.draftmark, c.dot, c.pm);
 
   c.body = el("div", "body");
   c.renform = el("form", "inline");
