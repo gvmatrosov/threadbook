@@ -30,7 +30,7 @@ function serve() {
 
 const T0 = Date.now() - 600000;
 const seed = {
-  "live/state": { title: "Самые успешные вайбкодеры", hotUntil: 0 },
+  "live/state": { title: "Самые успешные вайбкодеры", hotUntil: 0, lang: "ru" },
   "settings/mode": { mode: "flash" },
   "items/i1": { title: "Андрей Карпаты — автор слова", order: 1,
     text: "Бывший директор по ИИ в Tesla. Пост от 2 февраля 2025:\n\n- говоришь ИИ, что хочешь;\n- принимаешь правки **не читая**;\n- ошибку вставляешь обратно.\n\nСловарь Collins назвал `vibe coding` словом года." },
@@ -50,9 +50,10 @@ const check = (name, ok) => { results.push([name, ok]); console.log((ok ? "  з�
   const fake = fs.readFileSync(path.join(__dirname, "fake-claude.js"), "utf8");
   const errors = [];
 
-  async function open(width, height, scheme = "light") {
-    const ctx = await browser.newContext({ viewport: { width, height }, colorScheme: scheme });
-    await ctx.addInitScript(`${fake}\nwindow.__fakeInstall();\nfor (const [k, v] of Object.entries(${JSON.stringify(seed)})) window.__fake.set(k, v);`);
+  // The browser's own language is en-US unless a test says otherwise; the sheet's comes from live/state.
+  async function open(width, height, scheme = "light", { locale = "en-US", data = seed } = {}) {
+    const ctx = await browser.newContext({ viewport: { width, height }, colorScheme: scheme, locale });
+    await ctx.addInitScript(`${fake}\nwindow.__fakeInstall();\nfor (const [k, v] of Object.entries(${JSON.stringify(data)})) window.__fake.set(k, v);`);
     const page = await ctx.newPage();
     page.on("pageerror", e => errors.push(e.message));
     await page.goto(url);
@@ -86,8 +87,10 @@ const check = (name, ok) => { results.push([name, ok]); console.log((ok ? "  з�
       && c.querySelector(".md b")?.textContent === "не читая"));
   await shot(page, "2-phone-open");
 
-  check("у кнопок внизу пункта есть рамка",
-    await page.$$eval(card(1) + " .tools button", bs => bs.length === 3 && bs.every(b => parseFloat(getComputedStyle(b).borderTopWidth) > 0)));
+  const oneRow = n => page.$$eval(card(n) + " .tools button", bs => bs.length === 3 && bs.every(b => b.offsetTop === bs[0].offsetTop));
+  check("кнопки внизу пункта: в рамках, «сжать · переименовать · удалить» в одну строку на телефоне",
+    await page.$$eval(card(1) + " .tools button", bs => bs.map(b => b.textContent).join("|") === "сжать|переименовать|удалить"
+      && bs.every(b => parseFloat(getComputedStyle(b).borderTopWidth) > 0)) && await oneRow(1));
 
   check("рамка одна: у листа и у сообщений рамок нет",
     await page.evaluate(() => {
@@ -150,11 +153,12 @@ const check = (name, ok) => { results.push([name, ok]); console.log((ok ? "  з�
   await page.click(card(3) + " .head");
   await page.click(card(3) + ' [data-act="hide"]');
   const armed = await page.textContent(card(3) + ' [data-act="hide"]');
+  const armedRow = await oneRow(3);
   const stillThere = !(await db(page, "get", "items/i3")).hidden;
   await page.click(card(3) + ' [data-act="hide"]');
   await page.waitForTimeout(50);
   check("удаление в два тапа: первый спрашивает, второй прячет пункт",
-    armed.includes("точно") && stillThere && (await db(page, "get", "items/i3")).hidden === true && !(await page.$(card(3))));
+    armed === "точно?" && armedRow && stillThere && (await db(page, "get", "items/i3")).hidden === true && !(await page.$(card(3))));
 
   await page.click("#addItem");
   await page.fill("#addTitle", "Мой вопрос");
@@ -193,12 +197,32 @@ const check = (name, ok) => { results.push([name, ok]); console.log((ok ? "  з�
     await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   await shot(page, "4-phone-after");
 
+  // A sheet seeded without a language: English for an English browser, Russian for a Russian one.
+  const bare = { ...seed, "live/state": { title: "Vibe coders", hotUntil: 0 } };
+  const en = await open(390, 844, "light", { data: bare });
+  await en.click(card(1) + " .head");
+  check("лист без языка в английском браузере — английский: кнопки, режимы, поле, одна строка кнопок",
+    await en.evaluate(() => document.documentElement.lang === "en"
+      && [...document.querySelectorAll('.card[data-item="i1"] .tools button')].map(b => b.textContent).join("|") === "summarize|rename|delete"
+      && document.querySelector('[data-mode="economy"] b').textContent === "economy"
+      && document.querySelector('[data-mode="economy"] span').textContent === "answer in ~40 s, no extra cost"
+      && document.querySelector('.card[data-item="i1"] textarea').placeholder.startsWith("Reply")
+      && document.querySelector("#addItem").textContent === "＋ Item")
+    && await en.$$eval(card(1) + " .tools button", bs => bs.every(b => b.offsetTop === bs[0].offsetTop)));
+  await shot(en, "7-phone-english");
+  const ruBrowser = await open(390, 844, "light", { data: bare, locale: "ru-RU" });
+  await ruBrowser.click(card(1) + " .head");
+  check("лист без языка в русском браузере — русский",
+    (await ruBrowser.textContent(card(1) + ' [data-act="rename"]')) === "переименовать"
+    && (await ruBrowser.textContent("#addItem")) === "＋ Пункт");
+
   if (shotsAt) {
     const wide = await open(1200, 900);
     await wide.click(card(1) + " .head");
     await shot(wide, "5-desktop");
     const dark = await open(390, 844, "dark");
     await dark.click(card(1) + " .head");
+    await dark.waitForTimeout(250);
     await shot(dark, "6-phone-dark");
   }
 

@@ -2,26 +2,26 @@
 // Claude's Markdown goes through md.js, which builds nodes too), and the scroll position is kept
 // across re-renders so the page does not jump. Each card is built once and then only its parts are
 // updated, so a half-typed line, its cursor and its focus survive an answer landing anywhere.
+// Every word comes from i18n.js; a change of language rebuilds the cards (drafts live in local.js).
 import { md } from "./md.js";
+import { tr } from "./i18n.js";
 
 const $ = id => document.getElementById(id);
 
-const SEND = {
-  available: ["good", "сессия слушает"],
-  no_session: ["bad", "сессия не слушает — скажи в терминале «тетрадь, проснись»"],
-  writers_only: ["bad", "будить сессию может только владелец страницы"],
-  off: ["bad", "будить сессию отсюда нельзя"],
-};
-const STATUS = {
-  waiting: "ждёт ответа",
-  overdue: "ответа нет 30 с — кнопка «Разбудить сессию» внизу экрана",
-  seen: "Claude увидел, пишет…",
-  resent: "разбудил ещё раз, жду",
-  silent: "сессия молчит — загляни в терминал",
-};
-const VIA = { db: "через тетрадь", comment: "через комментарий" };
-const LENGTH_WORDS = [["short", "коротко"], ["normal", "по делу"], ["long", "развёрнуто"]];
+const SEND_CLASS = { available: "good", no_session: "bad", writers_only: "bad", off: "bad" };
+const STATUSES = ["waiting", "overdue", "seen", "resent", "silent"];
+const LENGTHS = ["short", "normal", "long"];
 const cards = new Map(); // item id → the card's live nodes
+let t = tr("en"), shownLang = null;
+
+// The words written into index.html: data-t → text, data-t-ph → placeholder, data-t-aria → aria-label.
+export function applyStatic(lang) {
+  t = tr(lang);
+  for (const e of document.querySelectorAll("[data-t]")) e.textContent = t(e.dataset.t);
+  for (const e of document.querySelectorAll("[data-t-ph]")) e.placeholder = t(e.dataset.tPh);
+  for (const e of document.querySelectorAll("[data-t-aria]")) e.setAttribute("aria-label", t(e.dataset.tAria));
+  document.documentElement.lang = lang;
+}
 
 export function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -48,17 +48,17 @@ export function when(at) {
 
 function ownerLine(l) {
   const box = el("div", "msg owner");
-  const facts = ["ты · " + when(l.at), VIA[l.via]];
-  if (l.seenIn != null) facts.push("увидел за " + l.seenIn + " с");
-  if (l.answeredIn != null) facts.push("ответ за " + l.answeredIn + " с");
+  const facts = [t("you") + " · " + when(l.at), t("via." + l.via)];
+  if (l.seenIn != null) facts.push(t("seenIn", l.seenIn));
+  if (l.answeredIn != null) facts.push(t("answeredIn", l.answeredIn));
   box.append(el("div", "txt", l.text), el("div", "meta", facts.filter(Boolean).join(" · ")));
-  if (STATUS[l.status]) box.append(el("div", "status " + l.status, STATUS[l.status]));
+  if (STATUSES.includes(l.status)) box.append(el("div", "status " + l.status, t("status." + l.status)));
   return box;
 }
 
 function claudeLine(l) {
   const box = el("div", "msg claude");
-  box.append(l.typing ? el("div", "typing", "пишет…") : md(l.text));
+  box.append(l.typing ? el("div", "typing", t("typing")) : md(l.text));
   if (l.at) box.append(el("div", "meta", "Claude · " + when(l.at)));
   return box;
 }
@@ -78,11 +78,11 @@ function build(id, draft) {
   c.title = el("span", "title");
   c.badge = el("span", "badge");
   c.spin = el("span", "spin");
-  c.spin.title = "строка в пути или Claude пишет";
+  c.spin.title = t("spinTitle");
   c.draftmark = el("span", "draftmark", "✎");
-  c.draftmark.title = "есть неотправленный черновик";
+  c.draftmark.title = t("draftTitle");
   c.dot = el("span", "dot");
-  c.dot.title = "новый ответ";
+  c.dot.title = t("dotTitle");
   c.pm = el("span", "pm"); // the open/close sign: a plus in a circle, a minus once open
   c.pm.setAttribute("aria-hidden", "true");
   c.head.append(c.num, c.title, c.badge, c.spin, c.draftmark, c.dot, c.pm);
@@ -93,16 +93,16 @@ function build(id, draft) {
   c.renform.dataset.id = id;
   c.renInput = el("input");
   c.renInput.maxLength = 200;
-  const save = el("button", "", "Сохранить");
+  const save = el("button", "", t("save"));
   save.type = "submit";
-  c.renform.append(c.renInput, save, button("quiet", "Отмена", "cancelRename", { id }));
+  c.renform.append(c.renInput, save, button("quiet", t("cancel"), "cancelRename", { id }));
   c.renform.hidden = true;
 
   c.lengths = el("div", "lengths");
   c.lengths.setAttribute("role", "group");
-  c.lengths.setAttribute("aria-label", "длина ответов в этом пункте");
-  c.lengths.append(el("span", "lbl", "ответы:"),
-    ...LENGTH_WORDS.map(([k, w]) => button("seg", w, "length", { id, length: k })));
+  c.lengths.setAttribute("aria-label", t("lengthsAria"));
+  c.lengths.append(el("span", "lbl", t("lengthsLabel")),
+    ...LENGTHS.map(k => button("seg", t("lengths." + k), "length", { id, length: k })));
 
   c.summary = el("div", "summary");
   c.fold = button("linkbtn", "", "fold", { id });
@@ -113,9 +113,9 @@ function build(id, draft) {
   form.dataset.id = id;
   c.text = el("textarea");
   c.text.maxLength = 1800;
-  c.text.placeholder = "Ответ по этому пункту (Ctrl+Enter — отправить)";
+  c.text.placeholder = t("placeholder");
   c.text.value = draft;
-  const send = el("button", "", "Отправить");
+  const send = el("button", "", t("sendBtn"));
   send.type = "submit";
   c.note = el("span", "note");
   const row = el("div", "row");
@@ -123,7 +123,7 @@ function build(id, draft) {
   form.append(c.text, row);
 
   c.squeezeBtn = button("linkbtn", "", "squeeze", { id });
-  c.renBtn = button("linkbtn", "переименовать", "rename", { id });
+  c.renBtn = button("linkbtn", t("rename"), "rename", { id });
   c.hideBtn = button("linkbtn danger", "", "hide", { id });
   const tools = el("div", "tools");
   tools.append(c.squeezeBtn, c.renBtn, c.hideBtn);
@@ -140,7 +140,7 @@ function fill(c, i, ui) {
   c.head.setAttribute("aria-expanded", String(open));
   c.num.textContent = i.num != null ? String(i.num) : "•";
   c.title.textContent = i.title;
-  c.badge.textContent = i.squeeze === "marked" ? "к сжатию" : i.squeeze === "done" ? "сжат" : "";
+  c.badge.textContent = i.squeeze === "marked" ? t("marked") : i.squeeze === "done" ? t("squeezed") : "";
   c.badge.className = "badge" + (i.squeeze === "done" ? " done" : "");
   c.badge.hidden = i.squeeze === "none";
   c.spin.hidden = !i.pending;
@@ -157,24 +157,30 @@ function fill(c, i, ui) {
   // A squeezed card leads with its conclusions; the full thread stays one tap away.
   const done = i.squeeze === "done" && i.summary;
   c.summary.hidden = !done;
-  if (done) c.summary.replaceChildren(el("div", "lbl", "Выводы"), md(i.summary));
+  if (done) c.summary.replaceChildren(el("div", "lbl", t("summary")), md(i.summary));
   const folded = done && !ui.unfolded.has(i.id);
   c.fold.hidden = !done;
-  c.fold.textContent = folded ? "показать переписку (" + (i.lines.length + (i.opening ? 1 : 0)) + ")" : "скрыть переписку";
+  c.fold.textContent = folded ? t("showThread", i.lines.length + (i.opening ? 1 : 0)) : t("hideThread");
   c.log.hidden = folded;
   if (!folded) {
     const opening = i.opening ? [claudeLine({ text: i.opening })] : [];
     const lines = i.lines.map(l => (l.from === "claude" ? claudeLine(l) : ownerLine(l)));
     c.log.replaceChildren(...(opening.length || lines.length ? [...opening, ...lines]
-      : [el("div", "empty", "Разговора в этом пункте ещё не было.")]));
+      : [el("div", "empty", t("emptyThread"))]));
   }
   c.note.textContent = i.note;
-  c.squeezeBtn.textContent = i.squeeze === "marked" ? "не сжимать" : i.squeeze === "done" ? "снять сжатие" : "сжать до выводов";
-  c.hideBtn.textContent = ui.confirmHide.has(i.id) ? "точно удалить? нажми ещё раз" : "удалить пункт";
+  c.squeezeBtn.textContent = t(i.squeeze === "marked" ? "unmark" : i.squeeze === "done" ? "unsqueeze" : "squeeze");
+  c.hideBtn.textContent = t(ui.confirmHide.has(i.id) ? "hideSure" : "hide");
 }
 
 export function render(v, ui) {
   const y = window.scrollY;
+  if (v.lang !== shownLang) {
+    applyStatic(v.lang);
+    for (const c of cards.values()) c.section.remove();
+    cards.clear();
+    shownLang = v.lang;
+  }
   document.title = v.title;
   $("title").textContent = v.title;
   const renamingSheet = ui.renaming.has("sheet");
@@ -186,25 +192,23 @@ export function render(v, ui) {
     b.setAttribute("aria-checked", String(b.dataset.mode === v.mode));
   }
 
-  const [cls, words] = SEND[v.canSend] || ["", "проверяю связь…"];
+  const known = v.canSend in SEND_CLASS;
   $("state").replaceChildren(
-    el("b", v.hot ? "good" : "", v.mode === "econom" ? "econom: каждая строка будит сессию"
-      : v.hot ? "разговор горячий" : "разговор остыл"),
+    el("b", v.hot ? "good" : "", t(v.mode === "economy" ? "economy" : v.hot ? "hot" : "cold")),
     document.createTextNode(" · "),
-    el("b", cls, words),
+    el("b", known ? SEND_CLASS[v.canSend] : "", known ? t("send." + v.canSend) : t("checking")),
   );
 
   const sq = $("squeeze");
   sq.disabled = v.sheet.squeezing || !v.sheet.marked;
-  sq.textContent = v.sheet.squeezing ? "🗜 сжимаю…" : "🗜 сжать лист" + (v.sheet.marked ? " (" + v.sheet.marked + ")" : "");
-  sq.title = v.sheet.marked ? "Claude запишет выводы в пункты с пометкой «к сжатию»"
-    : "сначала пометь пункты кнопкой «сжать до выводов»";
+  sq.textContent = v.sheet.squeezing ? t("squeezing") : t("squeezeSheet", v.sheet.marked);
+  sq.title = t(v.sheet.marked ? "squeezeTip" : "squeezeTipNone");
   // While a squeeze is on its way, say how it went out; once answered, show Claude's report.
   $("squeezeNote").textContent = v.sheet.squeezing ? v.sheet.note : v.sheet.reply || v.sheet.note;
 
   const box = $("items");
   if (!v.items.length) {
-    box.replaceChildren(el("div", "empty", "Пунктов пока нет — сессия их ещё раскладывает, или добавь свой."));
+    box.replaceChildren(el("div", "empty", t("emptyItems")));
   } else {
     const keep = new Set(v.items.map(i => i.id));
     for (const [id, c] of cards) if (!keep.has(id)) { c.section.remove(); cards.delete(id); }
@@ -228,7 +232,7 @@ export function render(v, ui) {
   document.body.classList.toggle("has-wakebar", !!overdue);
   if (overdue) {
     const short = overdue.text.length > 40 ? overdue.text.slice(0, 40) + "…" : overdue.text;
-    $("wake-text").textContent = "«" + short + "» — 30 с без ответа";
+    $("wake-text").textContent = t("waitedFor", short);
     $("wake").dataset.resend = overdue.id;
     $("wake").disabled = false;
   }

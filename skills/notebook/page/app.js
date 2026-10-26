@@ -4,7 +4,8 @@ import { createStore } from "./store.js";
 import { createWire } from "./wire.js";
 import { createActions } from "./actions.js";
 import { createLocal } from "./local.js";
-import { render, renderAbsent, sectionOf } from "./render.js";
+import { render, renderAbsent, sectionOf, applyStatic } from "./render.js";
+import { tr, browserLang } from "./i18n.js";
 
 const $ = id => document.getElementById(id);
 const CAN_SEND_EVERY_MS = 20000; // a read: posts nothing, never prompts
@@ -14,14 +15,17 @@ let storage = null;
 try { storage = window.localStorage; } catch (e) { storage = null; }
 const memory = new Map();
 const local = createLocal(storage || { getItem: k => memory.get(k) ?? null, setItem: (k, v) => memory.set(k, v) }, Date.now);
+// The sheet's language arrives with live/state; until then the browser's guess (en unless ru).
+const guess = browserLang(navigator);
+const T = (...a) => tr(last ? last.lang : guess)(...a);
+let last = null;
 const ui = { local, renaming: new Set(), unfolded: new Set(), confirmHide: new Set(), adding: false };
 
 async function start() {
   const [db, comments] = await Promise.all([claude.use("db"), claude.use("comments")]);
-  if (!db) return renderAbsent("Хранилище недоступно: открой страницу на claude.ai, войдя в свой аккаунт.");
+  if (!db) return renderAbsent(T("noDb"));
 
   const store = createStore(db);
-  let last = null;
   const draw = v => {
     last = v;
     render(v, ui);
@@ -31,18 +35,18 @@ async function start() {
   const wire = createWire({
     store, comments, anchorOf: sectionOf,
     clock: { now: Date.now, later: setTimeout, cancel: clearTimeout },
-    onChange: draw,
+    onChange: draw, lang: guess,
   });
   const actions = createActions({ store, getItems: wire.allItems });
   const redraw = () => last && draw(last);
-  const fail = e => { $("alerts").append(Object.assign(document.createElement("div"), { className: "alert", textContent: "Не сохранилось (" + ((e && e.code) || e) + ")." })); };
+  const fail = e => { $("alerts").append(Object.assign(document.createElement("div"), { className: "alert", textContent: T("saveFailed", (e && e.code) || e) })); };
 
   const checkCanSend = async () => {
     if (!comments) return wire.setCanSend("off");
     try { wire.setCanSend(await comments.canSendToClaude()); } catch (e) { wire.setCanSend("off"); }
   };
 
-  store.watchMessages(wire.setRows, e => renderAbsent("Связь с хранилищем оборвалась (" + e.code + "), обнови страницу."));
+  store.watchMessages(wire.setRows, e => renderAbsent(T("linkLost", e.code)));
   store.watchItems(wire.setItems, () => {});
   store.watchState(wire.setState, () => {});
   store.watchMode(wire.setMode, () => {});
@@ -136,5 +140,6 @@ async function start() {
   });
 }
 
+applyStatic(guess);
 if (window.claude && claude.use) start();
-else renderAbsent("Эта страница работает только внутри claude.ai.");
+else renderAbsent(T("outside"));

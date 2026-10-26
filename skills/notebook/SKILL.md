@@ -1,49 +1,52 @@
 ---
 name: notebook
-description: Lay the conversation out as a notebook page — a private claude.ai Artifact the person opens on any device (phone included) and writes into, while THIS live session answers there with its full memory. Use when the person says «разложи в тетрадь», «тетрадь», «в тетрадку», "notebook", or wants to keep talking to this session from the phone. Also use when a line arrives from such a page (a comment notification on a notebook artifact, or a tetrad poller hand-back).
+description: Lay the conversation out as a notebook page — a private claude.ai Artifact the person opens on any device (phone included) and writes into, while THIS live session answers there with its full memory. Use when the person says "lay this out in a notebook", "notebook", «разложи в тетрадь», «тетрадь», «в тетрадку», or wants to keep talking to this session from the phone. Also use when a line arrives from such a page (a comment notification on a notebook artifact, or a tetrad poller hand-back).
 ---
 
 # tetrad — a notebook page for this session
 
 The page is one sheet with several items — one card per distinct point or question, each with its
 own thread and its own answer field under it. On the page the person can also set each card's answer
-length (коротко / по делу / развёрнуто), mark cards «сжать до выводов» and press «сжать лист», add,
-rename and delete cards, and rename the sheet. The person writes a line in a card; it lands in the
+length (short / to the point / detailed), mark cards "summarize" and press "summarize the sheet", add,
+rename and delete cards, and rename the sheet. The page speaks English or Russian — the language you
+seed in step 1.3. The person writes a line in a card; it lands in the
 page's database (`db`) and reaches you by one of two wires:
 
 - **hot** — right after you answer you mark the conversation hot for ~2.5 minutes and start a cheap
   background poller; the page then writes the line to `db` only, and the poller hands it to you in
   ~7–15 s;
 - **cold** — past the hot window the page also sends the line as a comment to Claude. Claude Code's
-  own memoryless auto-replier posts «принято» in a hidden comment thread first, then this session is
+  own memoryless auto-replier posts a one-word "received" in a hidden comment thread first, then this session is
   woken (~30 s). Never answer in that thread and never read it: the line is in `db`.
 
-If no answer (not even «Claude пишет…») shows within 30 s, the page offers the person a one-tap
-«разбудить сессию» that re-sends the line by comment, once.
+If no answer (not even "Claude is writing…") shows within 30 s, the page offers the person a one-tap
+"Wake the session" that re-sends the line by comment, once.
 
-Two modes, chosen by the person and switchable on the page at any time:
+Two modes; every notebook starts in flash, and the person switches on the page at any time:
 - **flash** — both wires as above: hot lines in ~10 s, a little Haiku spent per line;
-- **econom** — comment wire only: no poller, no hot window, every line ~30–45 s, nothing extra spent.
+- **economy** — comment wire only: no poller, no hot window, every line ~30–45 s, nothing extra spent.
 Every owner line carries the `mode` it was sent in; that, not your memory, decides step 3 below.
 
 ## 1. Publish (once per notebook)
 
-0. The person picks the mode. If their request did not name one, ask in one line:
-   «flash — ответ за ~10 с, тратит немного Haiku; econom — ~40 с, без доп. расходов. Какой?»
+Do not ask anything first: the notebook starts in flash (economy only if the request itself named it).
+
 1. Copy the page files from the `page/` folder next to this SKILL.md (its base directory is printed
    above) into a fresh folder in your scratchpad, e.g. `<scratchpad>/tetrad-page/`.
 2. Publish with the Artifact tool: `file_path` = that folder's `index.html`, `root` = that folder,
    `files` = `{"style.css": "style.css", "app.js": "app.js", "store.js": "store.js",
    "wire.js": "wire.js", "render.js": "render.js", "actions.js": "actions.js", "local.js": "local.js",
-   "md.js": "md.js"}`, `capabilities` = `{"db": {}, "comments": {}}`,
+   "md.js": "md.js", "i18n.js": "i18n.js"}`, `capabilities` = `{"db": {}, "comments": {}}`,
    `icon` = "notebook", a `title` of two to four words, a one-sentence `description`.
 3. Split the material into items yourself: one item per distinct point, section or question (a
    numbered list of 7 points is 7 items, never one item holding the list). A Russian comment after
    the command shapes the split — follow it. Keep it to at most 12 items.
    Seed the sheet in ONE ArtifactData `batch` (all creates, no `if_version`):
-   - `set` `live/state` = `{"title": "<sheet title>", "hotUntil": 0}`;
-   - `set` `settings/mode` = `{"mode": "flash"}` or `{"mode": "econom"}` — the page owns this doc
-     from now on (the person switches it there); never write it again;
+   - `set` `live/state` = `{"title": "<sheet title>", "hotUntil": 0, "lang": "<ru|en>"}` — `lang` is
+     the language the person writes to you in: `ru` for Russian, `en` for anything else. The page's
+     buttons and notes follow it; titles, texts and answers are yours, in the person's language;
+   - `set` `settings/mode` = `{"mode": "flash"}` (or `{"mode": "economy"}` if the request named it) —
+     the page owns this doc from now on (the person switches it there); never write it again;
    - per item, `set` `items/i<N>` (N = 1, 2, …) = `{"title": "<short title>", "text": "<that point's
      content, your opening message in the card>", "order": N}`.
    Then `get` `live/state` and keep its `version` — every later write to it passes `if_version`.
@@ -64,7 +67,7 @@ A line has arrived when a comment notification names this artifact (its text car
    `re-<its id>` exists. Answer every unanswered owner line, oldest first. Its `item` names the card
    it was written in: answer about that item's point. A card you do not know was added by the person
    on the page — `get` `items/<item>` for its title. A line with `kind: "squeeze"` (item `sheet`) is
-   the «сжать лист» request: handle it as in step 6 instead of answering it in words.
+   the "summarize the sheet" request: handle it as in step 6 instead of answering it in words.
    Size the answer by the line's `length`: `short` — one to three sentences; `normal` (also when
    missing) — a short paragraph or a short list; `long` — a full, structured answer. **Each line exactly once,
    always at doc id `re-<line id>`** — the page flags any other answer as a duplicate.
@@ -73,7 +76,7 @@ A line has arrived when a comment notification names this artifact (its text car
      `{"from": "claude", "replyTo": "<id>", "item": "<the line's item>", "typing": true, "text": "", "seenAt": <now>, "at": <now>}`;
    - flash only: `update` `live/state` (with `if_version`) = `{"hotUntil": <now + 150000>}` — the page
      turns hot now, so the next line skips the comment wire instead of waking you a second time.
-   The page shows «Claude пишет…» and stops its 30-second alarm. Keep both returned versions.
+   The page shows "Claude is writing…" and stops its 30-second alarm. Keep both returned versions.
 3. Only if the line's `mode` is "flash" (a line without `mode` counts as flash): start the next
    poller now, before writing the answer — it needs ~15 s to warm up, and a line
    sent right after your answer must find it already polling. Agent tool, `subagent_type`
@@ -85,15 +88,15 @@ A line has arrived when a comment notification names this artifact (its text car
    - `set` `messages/re-<id>` (with `if_version`) =
      `{"from": "claude", "replyTo": "<id>", "item": "<the line's item>", "text": "<answer>", "seenAt": <same as step 2>, "at": <now>}`;
    - flash only: `update` `live/state` (with `if_version`) = `{"hotUntil": <now + 150000>}`.
-   In econom the batch is the answer alone, and a poller still running from an earlier flash line
+   In economy the batch is the answer alone, and a poller still running from an earlier flash line
    is left to finish by itself.
 5. When a poller reports a row, go to step 1. When it reports "nothing new", the hot window is over:
    do nothing — the page has switched to the comment wire by itself.
-6. «Сжать лист» (`kind: "squeeze"`): steps 2 and 3 as usual. Then `list` `items`; for every card with
+6. "Summarize the sheet" (`kind: "squeeze"`): steps 2 and 3 as usual. Then `list` `items`; for every card with
    `squeeze: "marked"` write its conclusions — two to five lines, what was settled in that thread.
    ONE `batch`: per marked card `update` `items/<id>` (with its `if_version`) =
    `{"summary": "<conclusions>", "squeeze": "done"}`; `set` `messages/re-<id>` = the answer
-   `"Сжал N пунктов: <titles>."`; flash: the `hotUntil` update. The page then leads each card with its
+   in the sheet's language, e.g. `"Summarized N items: <titles>."` / `"Сжал N пунктов: <titles>."`; flash: the `hotUntil` update. The page then leads each card with its
    conclusions and folds the thread. This does not shrink your own memory — only `/compact` typed in
    the terminal does; say so in one short sentence of the answer if the session is long.
 
@@ -115,8 +118,8 @@ A line has arrived when a comment notification names this artifact (its text car
 
 ## 4. Keeping the notebook alive
 
-- A watch can end after hours of silence; then the page shows «сессия не слушает» and comment lines
-  wake no one. When the person says so (e.g. «тетрадь, проснись»), or a notice says the watch ended:
+- A watch can end after hours of silence; then the page shows "session not listening" and comment lines
+  wake no one. When the person says so (e.g. "notebook, wake up" / «тетрадь, проснись»), or a notice says the watch ended:
   ArtifactComments `watch` with the url, confirm "auto-replies armed" in the listing, then do step 2
   for any unanswered lines.
 - The page works only opened at claude.ai (capabilities are absent elsewhere).

@@ -1,6 +1,7 @@
 // Автотест страницы тетради: drives the page's DOM-free modules (wire.js — delivery, actions.js —
 // what the person does to cards, local.js — this browser's memory) with a fake db, fake comments,
-// a fake clock and a fake storage — measure → act → measure, no browser.
+// a fake clock and a fake storage — measure → act → measure, no browser. i18n.js (the words in English
+// and Russian) rides along; the checks below speak Russian unless they test the language itself.
 //   node tools/test-page.js           run the checks
 //   node tools/test-page.js --porcha  порча: break those modules one line at a time; every break must
 //                                     turn at least one check red, or that check is false comfort
@@ -10,7 +11,7 @@ const path = require("path");
 const { pathToFileURL } = require("url");
 
 const PAGE = path.join(__dirname, "../skills/notebook/page");
-const MODULES = ["wire.js", "actions.js", "local.js"];
+const MODULES = ["wire.js", "actions.js", "local.js", "i18n.js"];
 
 function fakes() {
   let t = 1_000_000, seq = 0;
@@ -65,11 +66,11 @@ const tick = () => new Promise(r => setImmediate(r));
 const memStorage = () => { const m = new Map(); return { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)) }; };
 const note = s => s.view().items[0].note;
 
-async function setup(createWire, hotFor) {
+async function setup(createWire, hotFor, lang = "ru") {
   const f = fakes();
   let last = null;
   const wire = createWire({ store: f.store, comments: f.comments, anchorOf: item => "card-" + item, clock: f.clock,
-    onChange: v => { last = v; } });
+    onChange: v => { last = v; }, ...(lang ? { lang } : {}) });
   f.setOnRows(wire.setRows);
   wire.setItems([{ id: "i1", title: "Первый", text: "вступление", order: 1 }, { id: "i2", title: "Второй", text: "", order: 2 }]);
   wire.setState({ hotUntil: f.clock.now() + hotFor });
@@ -82,17 +83,17 @@ const checks = [
     await s.wire.send("i1", "раз"); await tick();
     return s.sent.length === 0 && s.rows.get("L1").via === "db" && s.rows.get("L1").mode === "flash";
   }],
-  ["econom: даже в горячем окне строка будит комментарием и несёт метку режима", async W => {
+  ["economy: даже в горячем окне строка будит комментарием и несёт метку режима", async W => {
     const s = await setup(W, 60000);
-    s.wire.setMode("econom");
+    s.wire.setMode("economy");
     await s.wire.send("i1", "эконом"); await tick();
-    return s.sent.length === 1 && s.rows.get("L1").mode === "econom" && s.view().hot === false;
+    return s.sent.length === 1 && s.rows.get("L1").mode === "economy" && s.view().hot === false;
   }],
   ["переключатель режима на странице сохраняет выбор, и следующая строка идёт по нему", async W => {
     const s = await setup(W, 60000);
-    await s.wire.chooseMode("econom"); await tick();
+    await s.wire.chooseMode("economy"); await tick();
     await s.wire.send("i1", "после переключения"); await tick();
-    return s.store.saved.join() === "econom" && s.view().mode === "econom" && s.sent.length === 1;
+    return s.store.saved.join() === "economy" && s.view().mode === "economy" && s.sent.length === 1;
   }],
   ["лимит комментариев: подсказка появляется только после отказа claude.ai", async W => {
     const s = await setup(W, -1);
@@ -327,16 +328,38 @@ const checks = [
     loc.setDraft("i1", "x"); loc.toggle("i1");
     return loc.draft("i1") === "x" && loc.isOpen("i1");
   }],
+  ["язык не задан: страница и комментарий по-английски", async W => {
+    const s = await setup(W, -1, null);
+    await s.wire.send("i1", "hello"); await tick();
+    const v = s.view();
+    return v.lang === "en" && v.title === "Notebook" && note(s).startsWith("Sent")
+      && s.sent[0].text.includes("“received”") && !/[а-я]/i.test(s.sent[0].text);
+  }],
+  ["язык листа из live/state главнее запасного: всё по-русски, и запрос сжатия тоже", async W => {
+    const s = await setup(W, -1, "en");
+    s.wire.setState({ hotUntil: 0, lang: "ru" });
+    s.wire.setItems([{ id: "i1", title: "Первый", order: 1, squeeze: "marked" }]);
+    await s.wire.send("i1", "привет"); await tick();
+    const hello = note(s);
+    await s.wire.askSqueeze(); await tick();
+    return s.view().lang === "ru" && hello.startsWith("Ушло") && s.sent[0].text.includes("«принято»")
+      && [...s.rows.values()].some(r => r.kind === "squeeze" && r.text.startsWith("Сожми лист"));
+  }],
+  ["неизвестный язык — английский; браузер выбирает русский только для ru", async (W, A, L, I) =>
+    I.tr("de")("title") === "Notebook" && I.tr("ru")("status.waiting") === "ждёт ответа"
+    && I.browserLang({ language: "ru-RU" }) === "ru" && I.browserLang({ language: "en-US" }) === "en"
+    && I.browserLang(undefined) === "en"],
+  ["датчик словаря: у английского и русского одни и те же слова", async (W, A, L, I) => I.missingKeys().length === 0],
 ];
 
 async function runAll(dir, quiet) {
   const q = "?" + Math.random();
   const load = f => import(pathToFileURL(path.join(dir, f)).href + q);
-  const [W, A, L] = await Promise.all(MODULES.map(load));
+  const [W, A, L, I] = await Promise.all(MODULES.map(load));
   const results = [];
   for (const [name, fn] of checks) {
     let ok = false;
-    try { ok = await fn(W.createWire, A, L); } catch (e) { ok = false; }
+    try { ok = await fn(W.createWire, A, L, I); } catch (e) { ok = false; }
     results.push([name, ok]);
     if (!quiet) console.log((ok ? "  зелёный  " : "  КРАСНЫЙ  ") + name);
   }
@@ -352,16 +375,16 @@ const breaks = [
     "if (w.resent) w.silent = true; else { w.overdue = true; resend(id); }"],
   ["wire.js", "любой ответ гасит все строки", 'r.from === "claude" && r.replyTo === id', 'r.from === "claude"'],
   ["wire.js", "«пишет…» показан как готовый ответ", 'status = "seen"', 'status = "answered"'],
-  ["wire.js", "датчик двойного ответа молчит", 'alerts.push("Лишний ответ на строку " + r.replyTo)', "0"],
-  ["wire.js", "в комментарии нет метки строки", "text + tail(id)", "text"],
+  ["wire.js", "датчик двойного ответа молчит", 'alerts.push(T("extraAnswer", r.replyTo))', "0"],
+  ["wire.js", "в комментарии нет метки строки", "text + tail(id, lang())", "text"],
   ["wire.js", "режим не влияет на горячее окно", 'mode === "flash" && (state.hotUntil', '(state.hotUntil'],
   ["wire.js", "строка не несёт метку режима", 'via: hot ? "db" : "comment", mode,', 'via: hot ? "db" : "comment",'],
   ["wire.js", "переключатель не сохраняет выбор", "try { await store.saveMode(m); }", "try { }"],
-  ["wire.js", "подсказка о лимите на любую ошибку", 'code(e) === "rate_limited" ? LIMIT', 'true ? LIMIT'],
+  ["wire.js", "подсказка о лимите на любую ошибку", 'code(e) === "rate_limited" ? T("limit")', 'true ? T("limit")'],
   ["wire.js", "строка уходит не в свой пункт", "const row = { id, item, text,", 'const row = { id, item: "i1", text,'],
   ["wire.js", "все пункты пишут в одну ветку", "const t = threads[item];", "const t = Object.values(threads)[0];"],
   ["wire.js", "ветка с прошлого визита забыта", "for (const k in map) threads[k] = threads[k] || map[k];", ""],
-  ["wire.js", "датчик строки вне пунктов молчит", 'alerts.push("Строка вне пунктов: " + l.id)', "0"],
+  ["wire.js", "датчик строки вне пунктов молчит", 'alerts.push(T("strayLine", l.id))', "0"],
   ["wire.js", "лента пункта показывает все строки", "const own = lines.filter(l => l.item === i.id);", "const own = lines;"],
   ["wire.js", "старые строки без ответа забыты", "wait(r.id, ANSWER_WAIT_MS - (now() - (r.at || 0)), !!r.resentAt);", ""],
   ["wire.js", "строка не несёт длину пункта", "length: lengthOf(item), at", 'length: "normal", at'],
@@ -369,11 +392,16 @@ const breaks = [
   ["wire.js", "«сжать лист» можно жать, пока прошлое не сжато", "if (!marked.length || squeezing())", "if (!marked.length)"],
   ["wire.js", "запрос сжатия без метки вида", "if (kind) row.kind = kind;", ""],
   ["wire.js", "«сжимаю» не гаснет после ответа", "!(replyOf(r.id) && !replyOf(r.id).typing)", "true"],
-  ["wire.js", "датчик сжатого без выводов молчит", 'alerts.push("Пункт сжат без выводов: " + (i.title || i.id))', "0"],
+  ["wire.js", "датчик сжатого без выводов молчит", 'alerts.push(T("squeezedBare", i.title || i.id))', "0"],
   ["wire.js", "удалённый пункт виден", "items.filter(i => !i.hidden).map(", "items.map("],
   ["wire.js", "строки удалённого пункта считаются потерянными", "const known = new Set([SHEET, ...items.map(i => i.id)]);",
     "const known = new Set([SHEET, ...items.filter(i => !i.hidden).map(i => i.id)]);"],
   ["wire.js", "колёсико не гаснет", 'own.some(l => l.from === "owner" && PENDING.has(l.status))', 'own.some(l => l.from === "owner")'],
+  ["wire.js", "язык листа не читается", "pickLang(state.lang, fallback)", "pickLang(fallback)"],
+  ["wire.js", "без языка страница по-русски", 'lang: fallback = "en"', 'lang: fallback = "ru"'],
+  ["i18n.js", "неизвестный язык — русский", 'tries.find(l => LANGS.includes(l)) || "en"', 'tries.find(l => LANGS.includes(l)) || "ru"'],
+  ["i18n.js", "браузер всегда выбирает русский", '/^ru\\b/i.test(nav.language || "") ? "ru" : "en"', '"ru"'],
+  ["i18n.js", "в русском словаре пропало слово", '  hideSure: "точно?",\n', ""],
   ["actions.js", "длина принимает что угодно", "!exists(id) || !LENGTHS.includes(length)", "!exists(id)"],
   ["actions.js", "пометка сжатия перевёрнута", 'squeeze: on ? "marked" : "none"', 'squeeze: on ? "none" : "marked"'],
   ["actions.js", "пустое имя пункта принимается", "if (!exists(id) || !t || t.length > MAX_TITLE) return false;", "if (!exists(id)) return false;"],

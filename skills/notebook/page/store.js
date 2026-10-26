@@ -7,7 +7,7 @@
 //   messages/re-<id>     Claude's one answer to line <id> {from:"claude", replyTo, item, text, typing?, seenAt, at}
 //   live/state           written by the session only {title, hotUntil}
 //   threads/<item>       the comment thread the cold wire writes into for that card {threadId}
-//   settings/mode        flash | econom, seeded by the session, switched by the person on the page
+//   settings/mode        flash | economy, seeded by the session, switched by the person on the page
 //   settings/title       the person's own name for the sheet {title}; beats live/state.title
 
 export function createStore(db) {

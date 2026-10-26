@@ -1,33 +1,29 @@
 // Which wire carries an owner line, and the safety net when no answer comes.
 //   HOT  — flash mode, and the session set live/state.hotUntil > now (its poller reads db): db only.
-//   COLD — db plus a comment sent to Claude, which wakes the session (~30 s). Econom mode is always
+//   COLD — db plus a comment sent to Claude, which wakes the session (~30 s). Economy mode is always
 //          cold: no poller at all. Each line carries the mode, so the session knows whether to start one.
 // No answer (not even «Claude пишет…») within ANSWER_WAIT_MS → the line offers a one-tap re-send,
 // once. It is a tap, not a timer: the platform takes sendToClaude only from the viewer's own gesture.
 // The sheet holds several items (cards); each owner line belongs to one, and each card keeps its own
 // comment thread. The hot window and the mode are per sheet. The «сжать лист» request is a line of
 // its own (kind "squeeze") in the pseudo-item "sheet", so it rides the same wires and safety net.
+// The words come from i18n.js in the sheet's language: live/state.lang, else the `lang` given here.
 // No DOM here, so tools/test-page.js drives it with a fake store, fake comments and a fake clock.
+import { tr, pickLang } from "./i18n.js";
 
 export const ANSWER_WAIT_MS = 30000;
 export const SHEET = "sheet";
 
-// The memoryless auto-replier reads the comment before the session does and obeys its text: this
-// tail keeps it to one word. The marker tells the session which db row the comment carries.
-export const tail = id =>
-  `\n\n[tetrad ${id}] Строка из тетради: ответ даст живая сессия прямо в пункте. ` +
-  "Здесь ответь одним словом «принято», без вопросов.";
+// The memoryless auto-replier reads the comment before the session does and obeys its text: the
+// tail keeps it to one word. The marker [tetrad <id>] tells the session which db row the comment carries.
+export const tail = (id, lang) => tr(lang)("tail", id);
 
-export const MODES = ["flash", "econom"];
+export const MODES = ["flash", "economy"];
 export const LENGTHS = ["short", "normal", "long"];
 const code = e => (e && (e.code || e.message)) || String(e);
-// Shown only once claude.ai has actually refused a wake-up — never as a warning in advance.
-const LIMIT = "claude.ai даёт будить сессию комментарием не чаще 60 раз в час — лимит исчерпан. " +
-  "Строка записана, сессия прочтёт её при следующем пробуждении. В полной версии тетради такого лимита нет.";
-const failNote = (what, e) => (code(e) === "rate_limited" ? LIMIT : what + " (" + code(e) + ").");
 const PENDING = new Set(["waiting", "seen", "overdue", "resent"]);
 
-export function createWire({ store, comments, anchorOf, clock, onChange }) {
+export function createWire({ store, comments, anchorOf, clock, onChange, lang: fallback = "en" }) {
   const { now, later, cancel } = clock;
   let rows = [], items = [], state = {}, title = "", mode = "flash", canSend = "…", hotTimer = null;
   let note = { item: null, text: "" };
@@ -35,6 +31,10 @@ export function createWire({ store, comments, anchorOf, clock, onChange }) {
   const waits = new Map(); // owner row id → {timer, overdue, resent, silent}
 
   const replyOf = id => rows.find(r => r.from === "claude" && r.replyTo === id);
+  const lang = () => pickLang(state.lang, fallback);
+  const T = (...a) => tr(lang())(...a);
+  // The limit note shows only once claude.ai has actually refused a wake-up — never in advance.
+  const failNote = (what, e) => (code(e) === "rate_limited" ? T("limit") : what + " (" + code(e) + ").");
   const isHot = () => mode === "flash" && (state.hotUntil || 0) > now();
   const changed = () => onChange(view());
   const say = (item, text) => { note = { item, text }; };
@@ -66,9 +66,9 @@ export function createWire({ store, comments, anchorOf, clock, onChange }) {
   // Call straight from the tap handler: the comment is started before anything is awaited.
   async function send(item, text, kind) {
     const id = store.newId(), hot = isHot();
-    const wake = hot || !comments ? null : comment(item, text + tail(id));
+    const wake = hot || !comments ? null : comment(item, text + tail(id, lang()));
     if (!waits.has(id)) wait(id, ANSWER_WAIT_MS);
-    say(item, hot ? "Ушло в тетрадь — сессия на связи." : "Ушло и будит сессию, это около 30 секунд.");
+    say(item, T(hot ? "sentHot" : "sentCold"));
     changed();
     const row = { id, item, text, via: hot ? "db" : "comment", mode, length: lengthOf(item), at: now() };
     if (kind) row.kind = kind;
@@ -76,7 +76,7 @@ export function createWire({ store, comments, anchorOf, clock, onChange }) {
       await store.addOwner(row);
     } catch (e) {
       cancel(waits.get(id).timer); waits.delete(id);
-      say(item, "Строка не записалась (" + code(e) + "), текст оставлен в поле.");
+      say(item, T("notSaved", code(e)));
       changed();
       return false;
     }
@@ -84,7 +84,7 @@ export function createWire({ store, comments, anchorOf, clock, onChange }) {
       try { await wake; } catch (e) {
         const w = waits.get(id);
         if (w && !replyOf(id)) w.overdue = true;
-        say(item, failNote("Разбудить сессию не удалось, строка в тетради", e));
+        say(item, failNote(T("wakeFailed"), e));
       }
     }
     changed();
@@ -96,7 +96,7 @@ export function createWire({ store, comments, anchorOf, clock, onChange }) {
     const marked = items.filter(i => !i.hidden && i.squeeze === "marked");
     if (!marked.length || squeezing()) return Promise.resolve(false);
     const list = marked.map(i => (i.order != null ? i.order + ". " : "") + (i.title || i.id)).join("; ");
-    return send(SHEET, "Сожми лист: запиши выводы в пункты " + list + ".", "squeeze");
+    return send(SHEET, T("squeezeAsk", list), "squeeze");
   }
 
   // A squeeze request is still on its way: asked, and no finished answer yet.
@@ -109,14 +109,14 @@ export function createWire({ store, comments, anchorOf, clock, onChange }) {
     if (!w || w.resent || !row || !comments || replyOf(id)) return false;
     cancel(w.timer);
     wait(id, ANSWER_WAIT_MS, true);
-    const p = comment(row.item, row.text + tail(id));
-    say(row.item, "Бужу сессию ещё раз.");
+    const p = comment(row.item, row.text + tail(id, lang()));
+    say(row.item, T("wakeAgain"));
     changed();
     try {
       await p;
       await store.markResent(id, now()).catch(() => {});
     } catch (e) {
-      say(row.item, failNote("Разбудить не удалось, загляни в терминал", e));
+      say(row.item, failNote(T("resendFailed"), e));
     }
     changed();
     return true;
@@ -153,7 +153,7 @@ export function createWire({ store, comments, anchorOf, clock, onChange }) {
     setMode(m);
     try { await store.saveMode(m); } catch (e) {
       mode = was;
-      say(null, "Режим не переключился (" + code(e) + ").");
+      say(null, T("modeFailed", code(e)));
       changed();
     }
   }
@@ -169,7 +169,7 @@ export function createWire({ store, comments, anchorOf, clock, onChange }) {
     const lines = rows.map(r => {
       if (r.from === "claude") {
         // Датчик «один ответ на строку»: an answer must live at re-<line id>, or two can pile up.
-        if (r.replyTo && r.id !== "re-" + r.replyTo) alerts.push("Лишний ответ на строку " + r.replyTo);
+        if (r.replyTo && r.id !== "re-" + r.replyTo) alerts.push(T("extraAnswer", r.replyTo));
         const q = r.replyTo && rows.find(o => o.id === r.replyTo);
         return { id: r.id, from: "claude", item: q ? q.item : r.item, text: r.text || "", typing: !!r.typing, at: r.at };
       }
@@ -183,15 +183,15 @@ export function createWire({ store, comments, anchorOf, clock, onChange }) {
     });
     // Датчик «строка в своём пункте»: a line whose card is missing would be invisible on the page.
     if (items.length) {
-      for (const l of lines) if (!known.has(l.item)) alerts.push("Строка вне пунктов: " + l.id);
+      for (const l of lines) if (!known.has(l.item)) alerts.push(T("strayLine", l.id));
     }
     // Датчик «сжатый пункт с выводами»: a card marked squeezed must carry its conclusions.
-    for (const i of items) if (!i.hidden && i.squeeze === "done" && !i.summary) alerts.push("Пункт сжат без выводов: " + (i.title || i.id));
+    for (const i of items) if (!i.hidden && i.squeeze === "done" && !i.summary) alerts.push(T("squeezedBare", i.title || i.id));
     const noteFor = item => (note.item === item ? note.text : "");
     const cards = items.filter(i => !i.hidden).map(i => {
       const own = lines.filter(l => l.item === i.id);
       const answers = own.filter(l => l.from === "claude" && !l.typing);
-      return { id: i.id, num: i.order, title: i.title || "Пункт", opening: i.text || "",
+      return { id: i.id, num: i.order, title: i.title || "•", opening: i.text || "",
         length: LENGTHS.includes(i.length) ? i.length : "normal",
         squeeze: i.squeeze === "marked" || i.squeeze === "done" ? i.squeeze : "none",
         summary: i.summary || "", lines: own, note: noteFor(i.id),
@@ -200,7 +200,7 @@ export function createWire({ store, comments, anchorOf, clock, onChange }) {
     });
     const sheetLines = lines.filter(l => l.item === SHEET);
     const lastAnswer = sheetLines.filter(l => l.from === "claude" && !l.typing).pop();
-    return { title: title || state.title || "Тетрадь", mode, hot: isHot(), canSend,
+    return { lang: lang(), title: title || state.title || T("title"), mode, hot: isHot(), canSend,
       note: noteFor(null), items: cards, lines, alerts,
       sheet: { marked: cards.filter(c => c.squeeze === "marked").length, squeezing: squeezing(),
         reply: lastAnswer ? lastAnswer.text : "", note: noteFor(SHEET) } };

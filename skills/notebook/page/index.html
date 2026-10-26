@@ -1,44 +1,45 @@
-<title>Тетрадь</title>
+<title>Notebook</title>
 <link rel="stylesheet" href="style.css">
 
 <main class="sheet">
   <header class="sheethead" id="head">
     <div class="titlerow" id="titleRow">
-      <h1 id="title">Тетрадь</h1>
-      <button type="button" class="linkbtn" data-act="rename" data-id="sheet">переименовать</button>
+      <h1 id="title" data-t="title">Notebook</h1>
+      <button type="button" class="linkbtn" data-act="rename" data-id="sheet" data-t="renameSheet">rename</button>
     </div>
     <form class="inline" id="renSheetForm" data-form="rename" data-id="sheet" hidden>
-      <input id="renSheet" maxlength="200" aria-label="Название листа">
-      <button type="submit">Сохранить</button>
-      <button type="button" class="quiet" data-act="cancelRename" data-id="sheet">Отмена</button>
+      <input id="renSheet" maxlength="200" aria-label="Sheet name" data-t-aria="sheetName">
+      <button type="submit" data-t="save">Save</button>
+      <button type="button" class="quiet" data-act="cancelRename" data-id="sheet" data-t="cancel">Cancel</button>
     </form>
-    <div class="state" id="state">Подключаюсь…</div>
-    <div class="modes" id="modes" role="radiogroup" aria-label="Режим тетради">
+    <div class="state" id="state" data-t="connecting">Connecting…</div>
+    <div class="modes" id="modes" role="radiogroup" aria-label="Notebook mode" data-t-aria="modesAria">
       <button type="button" role="radio" data-mode="flash" aria-checked="true">
-        <b>flash</b><span>ответ за ~10 с, тратит немного Haiku</span></button>
-      <button type="button" role="radio" data-mode="econom" aria-checked="false">
-        <b>econom</b><span>ответ за ~40 с, без доп. расходов</span></button>
+        <b>flash</b><span data-t="flashTip">answer in ~10 s, spends a little Haiku</span></button>
+      <button type="button" role="radio" data-mode="economy" aria-checked="false">
+        <b>economy</b><span data-t="economyTip">answer in ~40 s, no extra cost</span></button>
     </div>
     <div class="row">
-      <button type="button" class="chip" id="squeeze" data-act="squeezeSheet" disabled>🗜 сжать лист</button>
+      <button type="button" class="chip" id="squeeze" data-act="squeezeSheet" disabled>🗜 summarize the sheet</button>
       <span class="note" id="squeezeNote"></span>
     </div>
   </header>
   <div id="alerts"></div>
 
-  <div class="items" id="items"><div class="empty">Подключаюсь…</div></div>
+  <div class="items" id="items"><div class="empty" data-t="connecting">Connecting…</div></div>
 
-  <button type="button" class="add" id="addItem" data-act="add">＋ Пункт</button>
+  <button type="button" class="add" id="addItem" data-act="add" data-t="addItem">＋ Item</button>
   <form class="inline card" id="addForm" data-form="add" hidden>
-    <input id="addTitle" maxlength="200" placeholder="Название пункта" autocomplete="off" aria-label="Название пункта">
-    <button type="submit">Завести</button>
-    <button type="button" class="quiet" data-act="cancelAdd">Отмена</button>
+    <input id="addTitle" maxlength="200" placeholder="Item name" autocomplete="off" aria-label="Item name"
+      data-t-ph="itemName" data-t-aria="itemName">
+    <button type="submit" data-t="create">Add</button>
+    <button type="button" class="quiet" data-act="cancelAdd" data-t="cancel">Cancel</button>
   </form>
 </main>
 
 <div class="wakebar" id="wakebar" hidden>
   <span id="wake-text"></span>
-  <button id="wake" type="button">Разбудить сессию</button>
+  <button id="wake" type="button" data-t="wake">Wake the session</button>
 </div>
 
 <script type="module" src="app.js"></script>
