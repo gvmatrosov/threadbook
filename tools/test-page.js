@@ -350,6 +350,10 @@ const checks = [
     && I.browserLang({ language: "ru-RU" }) === "ru" && I.browserLang({ language: "en-US" }) === "en"
     && I.browserLang(undefined) === "en"],
   ["датчик словаря: у английского и русского одни и те же слова", async (W, A, L, I) => I.missingKeys().length === 0],
+  // The gallery names an artifact by the page's own <title> when it has one, ignoring the title the
+  // session passes at publish — so the page must carry none (the tab title is set by render.js).
+  ["в странице нет своего <title>: тетрадь в галерее зовётся по имени листа", async () =>
+    !/<title[\s>]/i.test(fs.readFileSync(path.join(PAGE, "index.html"), "utf8"))],
 ];
 
 async function runAll(dir, quiet) {

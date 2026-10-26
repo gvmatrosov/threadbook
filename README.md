@@ -28,7 +28,9 @@ private claude.ai Artifact: it works opened at claude.ai (phone browser included
 
 After a long answer, say **"put this in a notebook"** (or «разложи в тетрадь»), or run
 `/threadbook:notebook`. Claude splits the material into items — one per point or question —
-publishes the page and hands you the link. Open it anywhere and write under any item.
+publishes the page and hands you the link. Open it anywhere and write under any item. Up to 15
+points it just lays them out; with more, it first asks whether to publish them all, condense
+them, or drop some.
 
 - **Each item is its own thread** with its own answer field. Items fold to a numbered list; a red
   dot marks a new answer, ✎ an unsent draft, a spinner a line still on its way.
@@ -43,10 +45,11 @@ publishes the page and hands you the link. Open it anywhere and write under any 
 
 The session in your terminal must stay running — it is the one answering.
 
-- **flash** (the default): right after each answer the conversation is "hot" for about 2.5
-  minutes and a small background agent on Haiku watches the page. A line written then is picked
-  up in ~10–20 s. Once it cools, a line wakes the session through a claude.ai comment (~30–45 s).
-- **economy**: comment wake-ups only — every line ~30–45 s, nothing extra spent.
+- **flash** (the default): for 5 minutes after the page is published, and for about 2.5 minutes
+  after each answer, the conversation is "hot" and a small background agent on Haiku watches the
+  page. A line written then is picked up in ~10–20 s. Once it cools, a line wakes the session
+  through a claude.ai comment (~30–60 s).
+- **economy**: comment wake-ups only — every line ~30–60 s, nothing extra spent.
 
 Switch on the page at any time. If a line gets no reaction in 30 s, the page offers one tap to
 wake the session again.

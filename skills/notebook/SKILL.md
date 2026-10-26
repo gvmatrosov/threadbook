@@ -9,7 +9,7 @@ The page is one sheet with several items — one card per distinct point or ques
 own thread and its own answer field under it. On the page the person can also set each card's answer
 length (short / to the point / detailed), mark cards "summarize" and press "summarize the sheet", add,
 rename and delete cards, and rename the sheet. The page speaks English or Russian — the language you
-seed in step 1.3. The person writes a line in a card; it lands in the
+seed in step 1.4. The person writes a line in a card; it lands in the
 page's database (`db`) and reaches you by one of two wires:
 
 - **hot** — right after you answer you mark the conversation hot for ~2.5 minutes and start a cheap
@@ -24,36 +24,50 @@ If no answer (not even "Claude is writing…") shows within 30 s, the page offer
 
 Two modes; every notebook starts in flash, and the person switches on the page at any time:
 - **flash** — both wires as above: hot lines in ~10 s, a little Haiku spent per line;
-- **economy** — comment wire only: no poller, no hot window, every line ~30–45 s, nothing extra spent.
+- **economy** — comment wire only: no poller, no hot window, every line ~30–60 s, nothing extra spent.
 Every owner line carries the `mode` it was sent in; that, not your memory, decides step 3 below.
 
 ## 1. Publish (once per notebook)
 
-Do not ask anything first: the notebook starts in flash (economy only if the request itself named it).
+Do not ask anything first: the notebook starts in flash (economy only if the request itself named
+it). The one question is in step 1, and only for more than 15 items.
 
-1. Copy the page files from the `page/` folder next to this SKILL.md (its base directory is printed
+1. Split the material into items yourself: one item per distinct point, section or question (a
+   numbered list of 7 points is 7 items, never one item holding the list). A Russian comment after
+   the command shapes the split — follow it.
+   - Up to 15 items: go on.
+   - More than 15: before publishing, tell the person how many points there are and ask in one
+     line how to go on: publish all of them as they are, condense (merge related points down to 15
+     or fewer), or drop the extras (name the ones you would drop; they confirm or choose). Then
+     follow their choice.
+2. Copy the page files from the `page/` folder next to this SKILL.md (its base directory is printed
    above) into a fresh folder in your scratchpad, e.g. `<scratchpad>/threadbook-page/`.
-2. Publish with the Artifact tool: `file_path` = that folder's `index.html`, `root` = that folder,
+3. Publish with the Artifact tool: `file_path` = that folder's `index.html`, `root` = that folder,
    `files` = `{"style.css": "style.css", "app.js": "app.js", "store.js": "store.js",
    "wire.js": "wire.js", "render.js": "render.js", "actions.js": "actions.js", "local.js": "local.js",
    "md.js": "md.js", "i18n.js": "i18n.js"}`, `capabilities` = `{"db": {}, "comments": {}}`,
-   `icon` = "notebook", a `title` of two to four words, a one-sentence `description`.
-3. Split the material into items yourself: one item per distinct point, section or question (a
-   numbered list of 7 points is 7 items, never one item holding the list). A Russian comment after
-   the command shapes the split — follow it. Keep it to at most 12 items.
-   Seed the sheet in ONE ArtifactData `batch` (all creates, no `if_version`):
-   - `set` `live/state` = `{"title": "<sheet title>", "hotUntil": 0, "lang": "<ru|en>"}` — `lang` is
-     the language the person writes to you in: `ru` for Russian, `en` for anything else. The page's
-     buttons and notes follow it; titles, texts and answers are yours, in the person's language;
+   `icon` = "notebook", `title` = the sheet title (two to four words), a one-sentence
+   `description`. The page file carries no `<title>` of its own, so this title names the notebook
+   in the person's gallery.
+4. Seed the sheet in ONE ArtifactData `batch` (all creates, no `if_version`):
+   - `set` `live/state` = `{"title": "<sheet title>", "hotUntil": <flash: now + 300000; economy: 0>,
+     "lang": "<ru|en>"}` — the 5-minute hot window lets the person's first line skip the slow
+     comment wake-up (~1 min); `lang` is the language the person writes to you in: `ru` for
+     Russian, `en` for anything else. The page's buttons and notes follow it; titles, texts and
+     answers are yours, in the person's language;
    - `set` `settings/mode` = `{"mode": "flash"}` (or `{"mode": "economy"}` if the request named it) —
      the page owns this doc from now on (the person switches it there); never write it again;
    - per item, `set` `items/i<N>` (N = 1, 2, …) = `{"title": "<short title>", "text": "<that point's
      content, your opening message in the card>", "order": N}`.
    Then `get` `live/state` and keep its `version` — every later write to it passes `if_version`.
    The page draws Markdown in your texts: **bold**, `code`, lists, headings, code blocks.
-4. Put the link on the person's clipboard if their setup has a way to (for example a `cop` command)
+5. Flash only: start the poller at once — Agent tool, `subagent_type` "threadbook:poller",
+   `run_in_background: true`, prompt `url: <artifact url>. threshold: 0. polls: 45.` 45 polls last
+   ~5–6 minutes, longer than the hot window; keep it so: while the page is hot it writes lines to
+   `db` only, and only a running poller hears them.
+6. Put the link on the person's clipboard if their setup has a way to (for example a `cop` command)
    and say in one line what is there; otherwise print the link alone on its own line.
-5. The publish result must say the watch is connected with auto-replies armed. If it does not, run
+7. The publish result must say the watch is connected with auto-replies armed. If it does not, run
    ArtifactComments `watch` with the url and check the listing (`watch` without url).
 
 Get epoch milliseconds with `date +%s%3N`; never guess a time.
@@ -63,7 +77,8 @@ Get epoch milliseconds with `date +%s%3N`; never guess a time.
 A line has arrived when a comment notification names this artifact (its text carries
 `[threadbook <id>]`), when a poller hands back a row, or when the person says so in the terminal.
 
-1. ArtifactData `list` on `messages`. Owner rows are `from: "owner"`; a line is answered when a doc
+1. ArtifactData `list` on `messages`, and `date +%s%3N` in the same message (parallel calls — every
+   second before step 2 is a second the person watches nothing happen). Owner rows are `from: "owner"`; a line is answered when a doc
    `re-<its id>` exists. Answer every unanswered owner line, oldest first. Its `item` names the card
    it was written in: answer about that item's point. A card you do not know was added by the person
    on the page — `get` `items/<item>` for its title. A line with `kind: "squeeze"` (item `sheet`) is

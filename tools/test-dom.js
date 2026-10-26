@@ -72,6 +72,8 @@ const check = (name, ok) => { results.push([name, ok]); console.log((ok ? "  з�
     await page.$$eval(".items > .card", cs => cs.length === 3 && cs.every(c => c.querySelector(".body").hidden))
     && (await page.textContent(card(1) + " .num")) === "1");
 
+  check("вкладка браузера называется по имени листа", (await page.title()) === "Самые успешные вайбкодеры");
+
   check("старый ответ при первом входе не горит красной точкой",
     await page.$eval(card(2) + " .dot", d => d.hidden));
 
@@ -197,6 +199,14 @@ const check = (name, ok) => { results.push([name, ok]); console.log((ok ? "  з�
   check("нет горизонтальной прокрутки на телефоне",
     await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   await shot(page, "4-phone-after");
+
+  // More than 15 items is the person's call (the skill asks first); the page must hold them all.
+  const many = { ...seed };
+  for (let n = 4; n <= 20; n++) many["items/i" + n] = { title: "Пункт номер " + n, order: n, text: "текст " + n };
+  const big = await open(390, 844, "light", { data: many });
+  check("лист из 20 пунктов: все на месте, по порядку, без горизонтальной прокрутки",
+    await big.$$eval(".items > .card .num", ns => ns.length === 20 && ns.every((n, k) => n.textContent === String(k + 1)))
+    && await big.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
 
   // A sheet seeded without a language: English for an English browser, Russian for a Russian one.
   const bare = { ...seed, "live/state": { title: "Vibe coders", hotUntil: 0 } };
