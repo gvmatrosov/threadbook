@@ -1,8 +1,9 @@
 // Автотест экрана тетради в настоящем браузере (headless Chromium): the page from
 // skills/notebook/page runs against tools/fake-claude.js — measure → tap → measure on the DOM, plus
 // screenshots to look at. Needs Playwright:
-//   node tools/test-dom.js [--shots <dir>]   (Playwright must resolve: `npm i -g playwright` and NODE_PATH,
-//   or any local install; Chromium via `npx playwright install chromium`)
+//   node tools/test-dom.js [--shots <dir>]
+// It needs the Playwright package with its Chromium already on this machine (see playwright.dev);
+// NODE_PATH can point at an install elsewhere.
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
