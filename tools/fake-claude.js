@@ -2,7 +2,7 @@
 // window.claude.use("db") is an in-memory database with the calls the page makes, and
 // use("comments") records what would have been sent to Claude. window.__fake lets the test seed
 // rows and write as the session would.
-window.__fakeInstall = function () {
+window.__fakeStart = function () {
   const docs = new Map(); // "coll/id" → data
   const listeners = new Set();
   const sent = [];

@@ -3,7 +3,7 @@
 // screenshots to look at. Run:
 //   node tools/test-dom.js [--shots <dir>]
 // It needs the Playwright package with its Chromium already on this machine (see playwright.dev);
-// NODE_PATH can point at an install elsewhere.
+// NODE_PATH can point at a copy of it elsewhere.
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
@@ -55,7 +55,7 @@ const check = (name, ok) => { results.push([name, ok]); console.log((ok ? "  Ð·Ð
   // The browser's own language is en-US unless a test says otherwise; the sheet's comes from live/state.
   async function open(width, height, scheme = "light", { locale = "en-US", data = seed } = {}) {
     const ctx = await browser.newContext({ viewport: { width, height }, colorScheme: scheme, locale });
-    await ctx.addInitScript(`${fake}\nwindow.__fakeInstall();\nfor (const [k, v] of Object.entries(${JSON.stringify(data)})) window.__fake.set(k, v);`);
+    await ctx.addInitScript(`${fake}\nwindow.__fakeStart();\nfor (const [k, v] of Object.entries(${JSON.stringify(data)})) window.__fake.set(k, v);`);
     const page = await ctx.newPage();
     page.on("pageerror", e => errors.push(e.message));
     await page.goto(url);
