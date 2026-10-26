@@ -1,6 +1,6 @@
 ---
 name: notebook
-description: Lay the conversation out as a notebook page — a private claude.ai Artifact the person opens on any device (phone included) and writes into, while THIS live session answers there with its full memory. Use when the person says "put this in a notebook", "break this down into a notebook", "notebook", «разложи в тетрадь», «тетрадь», «в тетрадку», or wants to keep talking to this session from the phone. Also use when a line arrives from such a page (a comment notification on a notebook artifact, or a tetrad poller hand-back).
+description: Lay the conversation out as a notebook page — a private claude.ai Artifact the person opens on any device (phone included) and writes into, while THIS live session answers there with its full memory. Use when the person says "put this in a notebook", "break this down into a notebook", "notebook", «разложи в тетрадь», «тетрадь», «в тетрадку», or wants to keep talking to this session from the phone. Also use when a line arrives from such a page (a comment notification on a notebook artifact, or a Threadbook poller hand-back).
 ---
 
 # Threadbook — a notebook page for this session
