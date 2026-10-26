@@ -1,9 +1,9 @@
 ---
 name: notebook
-description: Lay the conversation out as a notebook page — a private claude.ai Artifact the person opens on any device (phone included) and writes into, while THIS live session answers there with its full memory. Use when the person says "lay this out in a notebook", "notebook", «разложи в тетрадь», «тетрадь», «в тетрадку», or wants to keep talking to this session from the phone. Also use when a line arrives from such a page (a comment notification on a notebook artifact, or a tetrad poller hand-back).
+description: Lay the conversation out as a notebook page — a private claude.ai Artifact the person opens on any device (phone included) and writes into, while THIS live session answers there with its full memory. Use when the person says "put this in a notebook", "break this down into a notebook", "notebook", «разложи в тетрадь», «тетрадь», «в тетрадку», or wants to keep talking to this session from the phone. Also use when a line arrives from such a page (a comment notification on a notebook artifact, or a tetrad poller hand-back).
 ---
 
-# tetrad — a notebook page for this session
+# Threadbook — a notebook page for this session
 
 The page is one sheet with several items — one card per distinct point or question, each with its
 own thread and its own answer field under it. On the page the person can also set each card's answer
@@ -32,7 +32,7 @@ Every owner line carries the `mode` it was sent in; that, not your memory, decid
 Do not ask anything first: the notebook starts in flash (economy only if the request itself named it).
 
 1. Copy the page files from the `page/` folder next to this SKILL.md (its base directory is printed
-   above) into a fresh folder in your scratchpad, e.g. `<scratchpad>/tetrad-page/`.
+   above) into a fresh folder in your scratchpad, e.g. `<scratchpad>/threadbook-page/`.
 2. Publish with the Artifact tool: `file_path` = that folder's `index.html`, `root` = that folder,
    `files` = `{"style.css": "style.css", "app.js": "app.js", "store.js": "store.js",
    "wire.js": "wire.js", "render.js": "render.js", "actions.js": "actions.js", "local.js": "local.js",
@@ -61,7 +61,7 @@ Get epoch milliseconds with `date +%s%3N`; never guess a time.
 ## 2. When a line arrives
 
 A line has arrived when a comment notification names this artifact (its text carries
-`[tetrad <id>]`), when a poller hands back a row, or when the person says so in the terminal.
+`[threadbook <id>]`), when a poller hands back a row, or when the person says so in the terminal.
 
 1. ArtifactData `list` on `messages`. Owner rows are `from: "owner"`; a line is answered when a doc
    `re-<its id>` exists. Answer every unanswered owner line, oldest first. Its `item` names the card
@@ -80,7 +80,7 @@ A line has arrived when a comment notification names this artifact (its text car
 3. Only if the line's `mode` is "flash" (a line without `mode` counts as flash): start the next
    poller now, before writing the answer — it needs ~15 s to warm up, and a line
    sent right after your answer must find it already polling. Agent tool, `subagent_type`
-   "tetrad:poller", `run_in_background: true`, prompt:
+   "threadbook:poller", `run_in_background: true`, prompt:
    `url: <artifact url>. threshold: <the largest owner "at" you have seen>. polls: 24.`
    One poller at a time: if an earlier one is still running, stop it first (TaskStop).
    The threshold is the last seen line, never "now", so nothing written meanwhile is lost.

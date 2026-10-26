@@ -9,7 +9,7 @@ export const browserLang = nav => (nav && /^ru\b/i.test(nav.language || "") ? "r
 const en = {
   title: "Notebook",
   // the comment wire: the memoryless auto-replier obeys this tail, so it keeps it to one word
-  tail: id => `\n\n[tetrad ${id}] A line from the notebook: the live session will answer right in the item. ` +
+  tail: id => `\n\n[threadbook ${id}] A line from the notebook: the live session will answer right in the item. ` +
     "Here reply with one word, “received”, and ask nothing.",
   limit: "claude.ai lets a comment wake the session at most 60 times an hour — the limit is used up. " +
     "The line is saved; the session will read it when it next wakes.",
@@ -86,7 +86,7 @@ const en = {
 
 const ru = {
   title: "Тетрадь",
-  tail: id => `\n\n[tetrad ${id}] Строка из тетради: ответ даст живая сессия прямо в пункте. ` +
+  tail: id => `\n\n[threadbook ${id}] Строка из тетради: ответ даст живая сессия прямо в пункте. ` +
     "Здесь ответь одним словом «принято», без вопросов.",
   limit: "claude.ai даёт будить сессию комментарием не чаще 60 раз в час — лимит исчерпан. " +
     "Строка записана, сессия прочтёт её при следующем пробуждении.",

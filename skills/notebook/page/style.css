@@ -1,4 +1,4 @@
-/* The tetrad look: a paper sheet on a warm ground, one card per item. Only the card has a frame —
+/* The Threadbook look: a paper sheet on a warm ground, one card per item. Only the card has a frame —
    the sheet is just paper, and messages are a tinted bubble (yours) or plain text (Claude's). */
 :root {
   --ground: #cdc3ae; --paper: #fdfbf4; --card: #ffffff; --ink: #2c2a26;

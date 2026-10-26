@@ -1,11 +1,21 @@
 {
-  "name": "tetrad",
+  "name": "threadbook",
   "version": "0.1.0",
-  "description": "A notebook page for a live Claude Code session: say “lay this out in a notebook” (or «разложи в тетрадь»), open the page on any device, write into it, and this same session answers there — fast while the conversation is hot, by a wake-up comment when it has gone quiet.",
+  "description": "Keep talking to your live Claude Code session from your phone: say “put this in a notebook” and the session lays the conversation out as a private claude.ai page, one thread per point — write under any point from any device and the same session, with its full memory, answers there.",
   "author": {
     "name": "gvmatrosov",
     "url": "https://github.com/gvmatrosov"
   },
   "license": "MIT",
-  "keywords": ["notebook", "artifact", "mobile", "remote", "session"]
+  "keywords": [
+    "notebook",
+    "phone",
+    "mobile",
+    "artifact",
+    "remote",
+    "session",
+    "threads"
+  ],
+  "homepage": "https://github.com/gvmatrosov/threadbook",
+  "repository": "https://github.com/gvmatrosov/threadbook"
 }

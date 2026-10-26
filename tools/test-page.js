@@ -109,7 +109,7 @@ const checks = [
   ["остывший разговор: строка уходит в базу и одним комментарием с меткой строки", async W => {
     const s = await setup(W, -1);
     await s.wire.send("i1", "два"); await tick();
-    return s.sent.length === 1 && s.sent[0].text.startsWith("два") && s.sent[0].text.includes("[tetrad L1]")
+    return s.sent.length === 1 && s.sent[0].text.startsWith("два") && s.sent[0].text.includes("[threadbook L1]")
       && s.rows.get("L1").via === "comment";
   }],
   ["горячее окно кончилось по часам: следующая строка уже будит комментарием", async W => {
@@ -423,7 +423,7 @@ async function porcha() {
     const src = fs.readFileSync(path.join(PAGE, mod), "utf8");
     if (!src.includes(from)) { console.log("  НЕТ СТРОКИ  " + mod + ": " + what); bad++; continue; }
     // A fresh folder per break: the broken module next to intact copies of the others.
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tetrad-porcha-"));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "threadbook-porcha-"));
     for (const m of MODULES) fs.copyFileSync(path.join(PAGE, m), path.join(dir, m));
     fs.writeFileSync(path.join(dir, mod), src.split(from).join(to));
     let results;

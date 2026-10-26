@@ -15,7 +15,7 @@ export const ANSWER_WAIT_MS = 30000;
 export const SHEET = "sheet";
 
 // The memoryless auto-replier reads the comment before the session does and obeys its text: the
-// tail keeps it to one word. The marker [tetrad <id>] tells the session which db row the comment carries.
+// tail keeps it to one word. The marker [threadbook <id>] tells the session which db row the comment carries.
 export const tail = (id, lang) => tr(lang)("tail", id);
 
 export const MODES = ["flash", "economy"];

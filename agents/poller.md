@@ -1,6 +1,6 @@
 ---
 name: poller
-description: Waits for a new owner line in a tetrad notebook page's database and reports it. Started by the notebook skill for one hot window; not for direct use.
+description: Waits for a new owner line in a Threadbook notebook page's database and reports it. Started by the notebook skill for one hot window; not for direct use.
 tools: ArtifactData, Bash, ToolSearch
 model: haiku
 omitClaudeMd: true

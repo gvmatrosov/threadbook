@@ -1,7 +1,7 @@
 // Per-viewer conveniences kept in this browser only: which cards are open, half-typed lines, and
 // which answers were already seen (the red dot on a closed card). Storage can be missing or throw
 // (private window, blocked site data) — then the page works the same, it just forgets on reload.
-const KEY = "tetrad.local.v1";
+const KEY = "threadbook.local.v1";
 
 export function createLocal(storage, now) {
   let data = null;
